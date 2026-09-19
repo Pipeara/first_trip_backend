@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import cors from "cors";
@@ -10,11 +11,15 @@ import communitiesRoutes from "./routes/communities.routes.js";
 
 import driversRoutes from "./routes/drivers.routes.js";
 
+import vehiclesRoutes from "./routes/vehicles.routes.js";
+
+
 const app = express();
 
 app.use(cors());
 
 app.use(express.json());
+
 
 app.get("/health", (req, res) => {
 
@@ -28,6 +33,7 @@ app.get("/health", (req, res) => {
 
 });
 
+
 app.use("/api/v1/rides", ridesRoutes);
 
 app.use("/api/v1/users", usersRoutes);
@@ -36,4 +42,8 @@ app.use("/api/v1/communities", communitiesRoutes);
 
 app.use("/api/v1/drivers", driversRoutes);
 
+app.use("/api/v1/vehicles", vehiclesRoutes);
+
+
 export default app;
+
