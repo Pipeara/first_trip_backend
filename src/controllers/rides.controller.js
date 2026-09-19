@@ -29,3 +29,75 @@ export async function getRides(req, res) {
         });
     }
 }
+
+
+export async function createRide(req, res) {
+    try {
+
+        const {
+            passenger_id,
+            community_id,
+            pickup_lat,
+            pickup_lng,
+            pickup_address,
+            destination_lat,
+            destination_lng,
+            destination_address
+        } = req.body;
+
+        const result = await pool.query(
+            `
+            INSERT INTO rides (
+                passenger_id,
+                community_id,
+                pickup_lat,
+                pickup_lng,
+                pickup_address,
+                destination_lat,
+                destination_lng,
+                destination_address
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING
+                id,
+                passenger_id,
+                driver_id,
+                vehicle_id,
+                community_id,
+                pickup_lat,
+                pickup_lng,
+                pickup_address,
+                destination_lat,
+                destination_lng,
+                destination_address,
+                status,
+                scheduled_at,
+                requested_at,
+                created_at,
+                updated_at
+            `,
+            [
+                passenger_id,
+                community_id,
+                pickup_lat,
+                pickup_lng,
+                pickup_address,
+                destination_lat,
+                destination_lng,
+                destination_address
+            ]
+        );
+
+        res.status(201).json({
+            message: "Viaje creado correctamente",
+            ride: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error("Error al crear viaje:", error.message);
+
+        res.status(500).json({
+            message: "Error interno del servidor"
+        });
+    }
+}
