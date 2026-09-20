@@ -69,6 +69,13 @@ function printProgress(title, completed, total) {
     return percentage;
 }
 
+function escapeRegExp(value) {
+    return value.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+    );
+}
+
 // =========================================================
 // ROUTE DETECTION
 // =========================================================
@@ -84,22 +91,31 @@ function routeContains(
         return false;
     }
 
+    /*
+     * Convierte esto:
+     *
+     * router.patch(
+     *     "/:id/accept",
+     *     authenticateToken,
+     *     authorizeRoles("DRIVER"),
+     *     acceptRide
+     * );
+     *
+     * en una sola línea lógica:
+     *
+     * router.patch( "/:id/accept", ...
+     */
+
     const normalized = content
         .replace(/\s+/g, " ")
-        .replace(/;/g, "; ");
+        .trim();
 
-    const patterns = [
-        `router.${method}("${route}")`,
-        `router.${method}('${route}')`,
-        `router.${method}("${route}"`,
-        `router.${method}('${route}'`,
-        `router.${method} ( "${route}" )`,
-        `router.${method} ( '${route}' )`
-    ];
+    const pattern =
+        new RegExp(
+            `router\\.${method}\\s*\\(\\s*["']${escapeRegExp(route)}["']`
+        );
 
-    return patterns.some(
-        pattern => normalized.includes(pattern)
-    );
+    return pattern.test(normalized);
 }
 
 function controllerContains(
@@ -147,7 +163,8 @@ async function checkDatabase() {
         communities: 0,
         drivers: 0,
         vehicles: 0,
-        rides: 0
+        rides: 0,
+        history: 0
     };
 
     try {
@@ -211,11 +228,67 @@ async function checkDatabase() {
         result.rides =
             ridesResult.rows[0].count;
 
+        const historyResult =
+            await pool.query(`
+                SELECT COUNT(*)::int AS count
+                FROM ride_status_history
+            `);
+
+        result.history =
+            historyResult.rows[0].count;
+
     } catch (error) {
 
         console.error(
             `❌ Database error: ${error.message}`
         );
+    }
+
+    return result;
+}
+
+// =========================================================
+// STATUS HISTORY
+// =========================================================
+
+async function getHistoryStatuses() {
+
+    const result = {
+        REQUESTED: false,
+        SEARCHING: false,
+        ACCEPTED: false,
+        DRIVER_ARRIVING: false,
+        DRIVER_WAITING: false,
+        IN_PROGRESS: false,
+        COMPLETED: false,
+        CANCELLED: false
+    };
+
+    try {
+
+        const historyResult =
+            await pool.query(`
+                SELECT DISTINCT status
+                FROM ride_status_history
+            `);
+
+        for (
+            const row
+            of historyResult.rows
+        ) {
+
+            if (
+                Object.prototype.hasOwnProperty.call(
+                    result,
+                    row.status
+                )
+            ) {
+                result[row.status] = true;
+            }
+        }
+
+    } catch {
+        // La conexión ya se valida en checkDatabase().
     }
 
     return result;
@@ -230,15 +303,19 @@ async function main() {
     console.clear();
 
     console.log("");
+
     console.log(
-        "╔════════════════════════════════════════════════════╗"
+        "╔══════════════════════════════════════════════════════════╗"
     );
+
     console.log(
-        "║             🚗 FIRST TRIP PROJECT BOARD            ║"
+        "║                 🚗 FIRST TRIP PROJECT BOARD             ║"
     );
+
     console.log(
-        "╚════════════════════════════════════════════════════╝"
+        "╚══════════════════════════════════════════════════════════╝"
     );
+
     console.log("");
 
     // =====================================================
@@ -336,6 +413,10 @@ async function main() {
 
         console.log(
             `   Rides                  ${database.rides}`
+        );
+
+        console.log(
+            `   Status history         ${database.history}`
         );
     }
 
@@ -437,6 +518,20 @@ async function main() {
             : "Drivers                servidor no disponible"
     );
 
+    const vehiclesApi =
+        await checkHttp(
+            "/api/v1/vehicles"
+        );
+
+    printStatus(
+        vehiclesApi.available &&
+        vehiclesApi.status === 200,
+
+        vehiclesApi.available
+            ? `Vehicles               HTTP ${vehiclesApi.status}`
+            : "Vehicles               servidor no disponible"
+    );
+
     const ridesApi =
         await checkHttp(
             "/api/v1/rides"
@@ -500,7 +595,6 @@ async function main() {
             "updateDriverStatus"
         );
 
-    // GET /drivers
     printStatus(
         driverGet &&
         driversApi.available &&
@@ -515,35 +609,21 @@ async function main() {
             : "GET /api/v1/drivers"
     );
 
-    // GET /drivers/:id
     printStatus(
         driverGetById,
         "GET /api/v1/drivers/:id"
     );
 
-    // POST /drivers
     printStatus(
         driverPost,
         "POST /api/v1/drivers"
     );
 
-    // PATCH /drivers/:id/status
-    if (
+    printStatus(
         driverPatch &&
-        driverStatusController
-    ) {
-
-        printStatus(
-            true,
-            "PATCH /api/v1/drivers/:id/status"
-        );
-
-    } else {
-
-        printPending(
-            "PATCH /api/v1/drivers/:id/status"
-        );
-    }
+        driverStatusController,
+        "PATCH /api/v1/drivers/:id/status"
+    );
 
     const driversCompleted = [
         driverGet,
@@ -577,23 +657,69 @@ async function main() {
     const vehiclesController =
         "src/controllers/vehicles.controller.js";
 
-    const vehiclesExists =
-        exists(vehiclesRoutes) &&
-        exists(vehiclesController);
-
-    if (vehiclesExists) {
-
-        printStatus(
-            true,
-            "Vehicles API structure"
+    const vehicleGet =
+        routeContains(
+            vehiclesRoutes,
+            "get",
+            "/"
         );
 
-    } else {
-
-        printPending(
-            "Vehicles API"
+    const vehicleGetById =
+        routeContains(
+            vehiclesRoutes,
+            "get",
+            "/:id"
         );
-    }
+
+    const vehiclePost =
+        routeContains(
+            vehiclesRoutes,
+            "post",
+            "/"
+        );
+
+    const vehiclePatch =
+        routeContains(
+            vehiclesRoutes,
+            "patch",
+            "/:id/active"
+        );
+
+    printStatus(
+        vehicleGet,
+        "GET /api/v1/vehicles"
+    );
+
+    printStatus(
+        vehicleGetById,
+        "GET /api/v1/vehicles/:id"
+    );
+
+    printStatus(
+        vehiclePost,
+        "POST /api/v1/vehicles"
+    );
+
+    printStatus(
+        vehiclePatch,
+        "PATCH /api/v1/vehicles/:id/active"
+    );
+
+    const vehiclesCompleted = [
+        vehicleGet,
+        vehicleGetById,
+        vehiclePost,
+        vehiclePatch
+    ].filter(Boolean).length;
+
+    const vehiclesTotal = 4;
+
+    const vehiclesPercentage =
+        printProgress(
+            "   Progress",
+            vehiclesCompleted,
+            vehiclesTotal
+        );
 
     // =====================================================
     // DAY 8 — RIDES
@@ -631,6 +757,55 @@ async function main() {
             "/:id"
         );
 
+    const rideSearch =
+        routeContains(
+            ridesRoutes,
+            "patch",
+            "/:id/search"
+        );
+
+    const rideAccept =
+        routeContains(
+            ridesRoutes,
+            "patch",
+            "/:id/accept"
+        );
+
+    const rideArriving =
+        routeContains(
+            ridesRoutes,
+            "patch",
+            "/:id/arriving"
+        );
+
+    const rideWaiting =
+        routeContains(
+            ridesRoutes,
+            "patch",
+            "/:id/waiting"
+        );
+
+    const rideStart =
+        routeContains(
+            ridesRoutes,
+            "patch",
+            "/:id/start"
+        );
+
+    const rideComplete =
+        routeContains(
+            ridesRoutes,
+            "patch",
+            "/:id/complete"
+        );
+
+    const rideCancel =
+        routeContains(
+            ridesRoutes,
+            "patch",
+            "/:id/cancel"
+        );
+
     printStatus(
         rideGet &&
         ridesApi.available &&
@@ -645,31 +820,93 @@ async function main() {
             : "GET /api/v1/rides"
     );
 
-    if (ridePost) {
+    printStatus(
+        ridePost,
+        "POST /api/v1/rides"
+    );
+
+    printStatus(
+        rideGetById,
+        "GET /api/v1/rides/:id"
+    );
+
+    printStatus(
+        rideSearch,
+        "PATCH /api/v1/rides/:id/search"
+    );
+
+    printStatus(
+        rideAccept,
+        "PATCH /api/v1/rides/:id/accept"
+    );
+
+    if (rideArriving) {
 
         printStatus(
             true,
-            "POST /api/v1/rides"
+            "PATCH /api/v1/rides/:id/arriving"
         );
 
     } else {
 
         printPending(
-            "POST /api/v1/rides"
+            "PATCH /api/v1/rides/:id/arriving"
         );
     }
 
-    if (rideGetById) {
+    if (rideWaiting) {
 
         printStatus(
             true,
-            "GET /api/v1/rides/:id"
+            "PATCH /api/v1/rides/:id/waiting"
         );
 
     } else {
 
         printPending(
-            "GET /api/v1/rides/:id"
+            "PATCH /api/v1/rides/:id/waiting"
+        );
+    }
+
+    if (rideStart) {
+
+        printStatus(
+            true,
+            "PATCH /api/v1/rides/:id/start"
+        );
+
+    } else {
+
+        printPending(
+            "PATCH /api/v1/rides/:id/start"
+        );
+    }
+
+    if (rideComplete) {
+
+        printStatus(
+            true,
+            "PATCH /api/v1/rides/:id/complete"
+        );
+
+    } else {
+
+        printPending(
+            "PATCH /api/v1/rides/:id/complete"
+        );
+    }
+
+    if (rideCancel) {
+
+        printStatus(
+            true,
+            "PATCH /api/v1/rides/:id/cancel"
+        );
+
+    } else {
+
+        printPending(
+            "PATCH /api/v1/rides/:id/cancel"
         );
     }
 
@@ -677,6 +914,248 @@ async function main() {
         exists(ridesController),
         "Rides controller"
     );
+
+    const rideFeatures = [
+        rideGet,
+        ridePost,
+        rideGetById,
+        rideSearch,
+        rideAccept,
+        rideArriving,
+        rideWaiting,
+        rideStart,
+        rideComplete,
+        rideCancel
+    ];
+
+    const ridesCompleted =
+        rideFeatures.filter(Boolean).length;
+
+    const ridesTotal =
+        rideFeatures.length;
+
+    const ridesPercentage =
+        printProgress(
+            "   Progress",
+            ridesCompleted,
+            ridesTotal
+        );
+
+    // =====================================================
+    // RIDE LIFECYCLE
+    // =====================================================
+
+    console.log("");
+    console.log(
+        "🔄 RIDE LIFECYCLE"
+    );
+
+    printStatus(
+        true,
+        "REQUESTED"
+    );
+
+    printStatus(
+        rideSearch,
+        "REQUESTED → SEARCHING"
+    );
+
+    printStatus(
+        rideAccept,
+        "SEARCHING → ACCEPTED"
+    );
+
+    if (rideArriving) {
+
+        printStatus(
+            true,
+            "ACCEPTED → DRIVER_ARRIVING"
+        );
+
+    } else {
+
+        printPending(
+            "ACCEPTED → DRIVER_ARRIVING"
+        );
+    }
+
+    if (rideWaiting) {
+
+        printStatus(
+            true,
+            "DRIVER_ARRIVING → DRIVER_WAITING"
+        );
+
+    } else {
+
+        printPending(
+            "DRIVER_ARRIVING → DRIVER_WAITING"
+        );
+    }
+
+    if (rideStart) {
+
+        printStatus(
+            true,
+            "DRIVER_WAITING → IN_PROGRESS"
+        );
+
+    } else {
+
+        printPending(
+            "DRIVER_WAITING → IN_PROGRESS"
+        );
+    }
+
+    if (rideComplete) {
+
+        printStatus(
+            true,
+            "IN_PROGRESS → COMPLETED"
+        );
+
+    } else {
+
+        printPending(
+            "IN_PROGRESS → COMPLETED"
+        );
+    }
+
+    if (rideCancel) {
+
+        printStatus(
+            true,
+            "Cancellation"
+        );
+
+    } else {
+
+        printPending(
+            "Cancellation"
+        );
+    }
+
+    // =====================================================
+    // STATUS HISTORY
+    // =====================================================
+
+    console.log("");
+    console.log(
+        "📜 RIDE STATUS HISTORY"
+    );
+
+    const historyStatuses =
+        database.connected
+            ? await getHistoryStatuses()
+            : {
+                REQUESTED: false,
+                SEARCHING: false,
+                ACCEPTED: false,
+                DRIVER_ARRIVING: false,
+                DRIVER_WAITING: false,
+                IN_PROGRESS: false,
+                COMPLETED: false,
+                CANCELLED: false
+            };
+
+    printStatus(
+        database.connected,
+        `ride_status_history ${
+            database.connected
+                ? `(${database.history} registros)`
+                : ""
+        }`
+    );
+
+    printStatus(
+        historyStatuses.SEARCHING,
+        "SEARCHING registrado"
+    );
+
+    printStatus(
+        historyStatuses.ACCEPTED,
+        "ACCEPTED registrado"
+    );
+
+    if (
+        historyStatuses.DRIVER_ARRIVING
+    ) {
+
+        printStatus(
+            true,
+            "DRIVER_ARRIVING registrado"
+        );
+
+    } else {
+
+        printPending(
+            "DRIVER_ARRIVING pendiente"
+        );
+    }
+
+    if (
+        historyStatuses.DRIVER_WAITING
+    ) {
+
+        printStatus(
+            true,
+            "DRIVER_WAITING registrado"
+        );
+
+    } else {
+
+        printPending(
+            "DRIVER_WAITING pendiente"
+        );
+    }
+
+    if (
+        historyStatuses.IN_PROGRESS
+    ) {
+
+        printStatus(
+            true,
+            "IN_PROGRESS registrado"
+        );
+
+    } else {
+
+        printPending(
+            "IN_PROGRESS pendiente"
+        );
+    }
+
+    if (
+        historyStatuses.COMPLETED
+    ) {
+
+        printStatus(
+            true,
+            "COMPLETED registrado"
+        );
+
+    } else {
+
+        printPending(
+            "COMPLETED pendiente"
+        );
+    }
+
+    if (
+        historyStatuses.CANCELLED
+    ) {
+
+        printStatus(
+            true,
+            "CANCELLED registrado"
+        );
+
+    } else {
+
+        printPending(
+            "CANCELLED pendiente"
+        );
+    }
 
     // =====================================================
     // DAY 9 — AUTH
@@ -697,25 +1176,55 @@ async function main() {
             "src/controllers/auth.controller.js"
         );
 
-    if (
-        authRoutes &&
-        authController
-    ) {
-
-        printStatus(
-            true,
-            "Auth structure"
+    const authMiddleware =
+        exists(
+            "src/middleware/auth.middleware.js"
         );
 
-    } else {
-
-        printPending(
-            "Authentication"
+    const jwtImplementation =
+        controllerContains(
+            "src/controllers/auth.controller.js",
+            "jwt.sign"
         );
-    }
+
+    printStatus(
+        authRoutes,
+        "Auth routes"
+    );
+
+    printStatus(
+        authController,
+        "Auth controller"
+    );
+
+    printStatus(
+        authMiddleware,
+        "JWT middleware"
+    );
+
+    printStatus(
+        jwtImplementation,
+        "JWT token generation"
+    );
+
+    const authCompleted = [
+        authRoutes,
+        authController,
+        authMiddleware,
+        jwtImplementation
+    ].filter(Boolean).length;
+
+    const authTotal = 4;
+
+    const authPercentage =
+        printProgress(
+            "   Progress",
+            authCompleted,
+            authTotal
+        );
 
     // =====================================================
-    // DAY 10 — MAPS
+    // DAY 10 — MAPS / OSRM
     // =====================================================
 
     console.log("");
@@ -765,9 +1274,10 @@ async function main() {
         "📡 DÍA 11 — WEBSOCKET"
     );
 
-    if (
-        exists("src/websocket")
-    ) {
+    const websocketExists =
+        exists("src/websocket");
+
+    if (websocketExists) {
 
         printStatus(
             true,
@@ -790,34 +1300,64 @@ async function main() {
         "🎯 CURRENT TASK"
     );
 
-    if (
-        driversPercentage < 100
-    ) {
+    if (!rideArriving) {
 
         console.log(
-            "   PATCH /api/v1/drivers/:id/status"
+            "   PATCH /api/v1/rides/:id/arriving"
         );
 
         console.log(
-            "   → Completar Día 6"
+            "   → ACCEPTED → DRIVER_ARRIVING"
         );
 
-    } else if (
-        !vehiclesExists
-    ) {
+    } else if (!rideWaiting) {
 
         console.log(
-            "   DÍA 7 — Vehicles API"
+            "   PATCH /api/v1/rides/:id/waiting"
         );
 
         console.log(
-            "   → Crear vehicles.controller.js"
+            "   → DRIVER_ARRIVING → DRIVER_WAITING"
+        );
+
+    } else if (!rideStart) {
+
+        console.log(
+            "   PATCH /api/v1/rides/:id/start"
+        );
+
+        console.log(
+            "   → DRIVER_WAITING → IN_PROGRESS"
+        );
+
+    } else if (!rideComplete) {
+
+        console.log(
+            "   PATCH /api/v1/rides/:id/complete"
+        );
+
+        console.log(
+            "   → IN_PROGRESS → COMPLETED"
+        );
+
+    } else if (!rideCancel) {
+
+        console.log(
+            "   PATCH /api/v1/rides/:id/cancel"
+        );
+
+        console.log(
+            "   → Implementar cancelación"
         );
 
     } else {
 
         console.log(
-            "   Revisar siguiente bloque del roadmap"
+            "   Ride lifecycle principal completado"
+        );
+
+        console.log(
+            "   → Siguiente bloque: OSRM / WebSocket"
         );
     }
 
@@ -828,7 +1368,7 @@ async function main() {
     console.log("");
 
     console.log(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     );
 
     console.log(
@@ -836,7 +1376,7 @@ async function main() {
     );
 
     console.log(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     );
 
     console.log(
@@ -844,7 +1384,19 @@ async function main() {
     );
 
     console.log(
-        `   Database                 ${
+        `   Día 7 — Vehicles API      ${vehiclesPercentage}%`
+    );
+
+    console.log(
+        `   Día 8 — Rides API         ${ridesPercentage}%`
+    );
+
+    console.log(
+        `   Día 9 — Auth              ${authPercentage}%`
+    );
+
+    console.log(
+        `   Database                  ${
             database.connected
                 ? "ONLINE"
                 : "OFFLINE"
@@ -852,7 +1404,7 @@ async function main() {
     );
 
     console.log(
-        `   API                      ${
+        `   API                       ${
             health.available
                 ? "ONLINE"
                 : "OFFLINE"
@@ -860,7 +1412,7 @@ async function main() {
     );
 
     console.log(
-        `   Git                      ${
+        `   Git                       ${
             gitStatus === ""
                 ? "CLEAN"
                 : "CHANGES"
@@ -868,7 +1420,7 @@ async function main() {
     );
 
     console.log(
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     );
 
     console.log("");

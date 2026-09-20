@@ -13,23 +13,23 @@
 
 ---
 
-# 📅 Roadmap de 13 días
+# 📅 Roadmap de desarrollo
 
-| Día        | Objetivo principal                     | Estado         |
-| ---------- | -------------------------------------- | -------------- |
-| **Día 1**  | PostgreSQL + base de datos             | ✅ Completado   |
-| **Día 2**  | Schema + tablas + relaciones           | ✅ Completado   |
-| **Día 3**  | Node.js + Express + `pg` + conexión DB | ✅ Completado   |
-| **Día 4**  | Users API                              | ✅ Completado   |
-| **Día 5**  | Communities API                        | ✅ Completado   |
-| **Día 6**  | Drivers API                            | 🟡 En progreso |
-| **Día 7**  | Vehicles API                           | ⏳ Siguiente    |
-| **Día 8**  | Rides completo + estados               | ⏳              |
-| **Día 9**  | Auth + bcrypt + JWT                    | ⏳              |
-| **Día 10** | Routing / OSRM                         | ⏳              |
-| **Día 11** | WebSocket + tiempo real                | ⏳              |
-| **Día 12** | Incidentes + Monitor                   | ⏳              |
-| **Día 13** | Flutter + Primer Vertical Slice        | ⏳              |
+| Día        | Objetivo principal                     | Estado                 |
+| ---------- | -------------------------------------- | ---------------------- |
+| **Día 1**  | PostgreSQL + base de datos             | ✅ Completado           |
+| **Día 2**  | Schema + tablas + relaciones           | ✅ Completado           |
+| **Día 3**  | Node.js + Express + `pg` + conexión DB | ✅ Completado           |
+| **Día 4**  | Users API                              | ✅ Completado           |
+| **Día 5**  | Communities API                        | ✅ Completado           |
+| **Día 6**  | Drivers API                            | ✅ Completado           |
+| **Día 7**  | Vehicles API                           | ✅ Completado           |
+| **Día 8**  | Rides + estados + aceptación           | 🟡 En progreso         |
+| **Día 9**  | Auth + bcrypt + JWT                    | ✅ Completado           |
+| **Día 10** | Maps + OSRM                            | 🟡 Estructura iniciada |
+| **Día 11** | WebSocket + tiempo real                | ⏳ Pendiente            |
+| **Día 12** | Incidentes + Monitor                   | ⏳ Pendiente            |
+| **Día 13** | Flutter + Primer Vertical Slice        | ⏳ Pendiente            |
 
 ---
 
@@ -59,6 +59,10 @@
 * [x] Agregar RUT
 * [x] Verificar estructura de tablas
 * [x] Verificar relaciones entre tablas
+* [x] Verificar estructura de `drivers`
+* [x] Verificar estructura de `vehicles`
+* [x] Verificar estructura de `rides`
+* [x] Verificar estructura de `ride_status_history`
 
 ### Tablas
 
@@ -92,6 +96,7 @@ incidents
 * [x] Crear `/health`
 * [x] Crear estructura `routes/`
 * [x] Crear estructura `controllers/`
+* [x] Crear estructura `services/`
 
 ### Arquitectura actual
 
@@ -103,6 +108,8 @@ app.js
 routes
     ↓
 controllers
+    ↓
+services
     ↓
 pg Pool
     ↓
@@ -117,16 +124,12 @@ PostgreSQL
 
 * [x] Crear Users controller
 * [x] Crear Users routes
-* [x] Crear `GET /api/v1/users`
+* [x] `GET /api/v1/users`
 * [x] Consultar usuarios desde PostgreSQL
 * [x] Probar API → PostgreSQL
 * [x] Crear datos de prueba
 * [x] Verificar usuario Passenger
 * [x] Verificar usuario Driver
-
-### Próximamente en Auth
-
-Las operaciones relacionadas con contraseñas, login y JWT se trasladan al bloque de autenticación.
 
 ---
 
@@ -136,13 +139,13 @@ Las operaciones relacionadas con contraseñas, login y JWT se trasladan al bloqu
 
 * [x] Crear `communities.controller.js`
 * [x] Crear `communities.routes.js`
-* [x] Crear `GET /api/v1/communities`
+* [x] `GET /api/v1/communities`
 * [x] Consultar comunidades desde PostgreSQL
 * [x] Probar endpoint con `curl`
 * [x] Probar endpoint con Postman
 * [x] Verificar comunidad Alto San Carlos
 
-### Endpoint actual
+### Endpoint
 
 ```http
 GET /api/v1/communities
@@ -150,7 +153,7 @@ GET /api/v1/communities
 
 ---
 
-# 🟡 DÍA 6 — Drivers API
+# 🟢 DÍA 6 — Drivers API
 
 ## Drivers API
 
@@ -166,23 +169,15 @@ GET /api/v1/communities
 * [x] Evitar duplicar un conductor
 * [x] Crear Driver Test
 * [x] Crear Driver Test 2
-* [x] Probar respuestas HTTP
+* [x] `PATCH /api/v1/drivers/:id/status`
+* [x] Validar `OFFLINE`
+* [x] Validar `ONLINE`
+* [x] Validar `BUSY`
+* [x] Validar conductor inexistente
+* [x] Validar estado inválido
+* [x] Probar con `curl`
+* [x] Probar con Postman
 * [x] Verificar datos en PostgreSQL
-
-### Pendiente
-
-* [ ] `PATCH /api/v1/drivers/:id/status`
-* [ ] Validar estados `OFFLINE`
-* [ ] Validar estados `ONLINE`
-* [ ] Validar estados `BUSY`
-* [ ] Probar cambio `OFFLINE → ONLINE`
-* [ ] Probar cambio `ONLINE → BUSY`
-* [ ] Probar cambio `BUSY → OFFLINE`
-* [ ] Validar conductor inexistente
-* [ ] Validar estado inválido
-* [ ] Probar con `curl`
-* [ ] Probar con Postman
-* [ ] Commit y push
 
 ### Estados
 
@@ -192,7 +187,7 @@ ONLINE
 BUSY
 ```
 
-### Objetivo del día
+### Flujo
 
 ```text
 Driver
@@ -206,74 +201,168 @@ BUSY
 
 ---
 
-# ⏳ DÍA 7 — Vehicles API
+# 🟢 DÍA 7 — Vehicles API
 
 ## Vehicles API
 
-* [ ] Crear `vehicles.controller.js`
-* [ ] Crear `vehicles.routes.js`
-* [ ] Crear `GET /api/v1/vehicles`
-* [ ] Crear `GET /api/v1/vehicles/:id`
-* [ ] Crear `POST /api/v1/vehicles`
-* [ ] Crear `PATCH /api/v1/vehicles/:id`
-* [ ] Validar `driver_id`
-* [ ] Validar conductor existente
-* [ ] Validar placa única
-* [ ] Validar año
-* [ ] Validar `active`
-* [ ] Probar relación Driver → Vehicle
-* [ ] Probar con `curl`
-* [ ] Probar con Postman
-* [ ] Commit y push
+* [x] Crear `vehicles.controller.js`
+* [x] Crear `vehicles.routes.js`
+* [x] `GET /api/v1/vehicles`
+* [x] `GET /api/v1/vehicles/:id`
+* [x] `POST /api/v1/vehicles`
+* [x] Actualizar `active`
+* [x] Validar `driver_id`
+* [x] Validar conductor existente
+* [x] Validar placa única
+* [x] Validar año
+* [x] Validar `active`
+* [x] Probar relación Driver → Vehicle
+* [x] Probar con `curl`
+* [x] Probar con Postman
+* [x] Verificar estructura e índices PostgreSQL
 
-### Relación
+## Modelo Driver → Vehicle
+
+Un conductor puede tener **varios vehículos**.
 
 ```text
 Driver
    │
-   └── Vehicle
-         ├── brand
-         ├── model
-         ├── year
-         ├── plate
-         ├── color
-         └── active
+   ├── Vehicle A
+   │
+   ├── Vehicle B
+   │
+   └── Vehicle C
+```
+
+`driver_id` **NO es UNIQUE**.
+
+### Estado actual
+
+```text
+Driver
+   │
+   ├── Hyundai Accent → active = false
+   │
+   └── Toyota Corolla → active = true
+```
+
+### Regla de negocio pendiente
+
+* [ ] Garantizar que un conductor tenga como máximo un vehículo `active = true`
+* [ ] Definir actualización transaccional del vehículo activo
+* [ ] Utilizar vehículo activo durante `Accept Ride`
+
+> Esta regla debe quedar consolidada antes de implementar la aceptación de viajes.
+
+---
+
+# 🟡 DÍA 8 — Rides + Estados
+
+## Rides API
+
+### Implementado
+
+* [x] `GET /api/v1/rides`
+* [x] `GET /api/v1/rides/:id`
+* [x] `POST /api/v1/rides`
+* [x] Autenticación JWT para crear ride
+* [x] Derivar `passenger_id` desde `req.user.userId`
+* [x] Validar usuario
+* [x] Validar rol `PASSENGER`
+* [x] Validar usuario `ACTIVE`
+* [x] Validar Community existente
+* [x] Validar Community activa
+* [x] Validar membership `ACTIVE`
+* [x] Crear ride desde API
+* [x] Verificar ride en PostgreSQL
+* [x] Estado inicial `REQUESTED`
+
+### Endpoint actual
+
+```http
+POST /api/v1/rides
+Authorization: Bearer TOKEN
+```
+
+### Flujo actual
+
+```text
+Passenger
+    ↓
+JWT
+    ↓
+req.user.userId
+    ↓
+Validar Passenger
+    ↓
+Validar Community
+    ↓
+Validar Membership
+    ↓
+Crear Ride
+    ↓
+REQUESTED
 ```
 
 ---
 
-# ⏳ DÍA 8 — Rides completo + estados
+## Pendiente
 
-## Rides API
+### Búsqueda y asignación
 
-### Ya implementado
-
-* [x] `GET /api/v1/rides`
-* [x] `POST /api/v1/rides`
-* [x] Crear ride desde API
-* [x] Verificar ride en PostgreSQL
-
-### Pendiente
-
-* [ ] `GET /api/v1/rides/:id`
-* [ ] Validar Passenger
-* [ ] Validar Community
-* [ ] Validar membership
 * [ ] Buscar conductores
-* [ ] `SEARCHING`
-* [ ] Accept ride
-* [ ] Asociar Driver
-* [ ] Asociar Vehicle
-* [ ] PostgreSQL transaction
-* [ ] Start ride
-* [ ] Complete ride
-* [ ] Cancel ride
-* [ ] Validar transiciones de estado
-* [ ] Crear `ride_status_history`
-* [ ] Consultar historial
+* [ ] Implementar `REQUESTED → SEARCHING`
+* [ ] Definir disponibilidad de conductores
+* [ ] `PATCH /api/v1/rides/:id/accept`
+
+### Accept Ride
+
+* [ ] Validar JWT
+* [ ] Validar rol `DRIVER`
+* [ ] Validar usuario `ACTIVE`
+* [ ] Buscar Driver asociado al usuario autenticado
+* [ ] Validar `approval_status = APPROVED`
+* [ ] Validar `status = ONLINE`
+* [ ] Buscar vehículo activo
+* [ ] Validar que el vehículo pertenezca al Driver
+* [ ] Asociar `driver_id`
+* [ ] Asociar `vehicle_id`
+* [ ] Cambiar estado a `ACCEPTED`
+* [ ] Registrar `accepted_at`
+* [ ] Registrar `updated_at`
+* [ ] Crear registro en `ride_status_history`
+* [ ] Usar `changed_by = req.user.userId`
+
+### Concurrencia
+
+* [ ] Usar PostgreSQL transaction
+* [ ] Usar `SELECT ... FOR UPDATE`
+* [ ] Impedir que dos conductores acepten el mismo viaje
+* [ ] Hacer `COMMIT` después de completar todas las operaciones
+* [ ] Hacer `ROLLBACK` ante cualquier error
+
+### Estados posteriores
+
+* [ ] `ACCEPTED → DRIVER_ARRIVING`
+* [ ] `DRIVER_ARRIVING → DRIVER_WAITING`
+* [ ] `DRIVER_WAITING → IN_PROGRESS`
+* [ ] `IN_PROGRESS → COMPLETED`
+* [ ] Implementar `CANCELLED`
+* [ ] Validar todas las transiciones
+
+### Base de datos
+
+* [ ] Agregar al enum `ride_status` los estados faltantes:
+
+  * [ ] `IN_PROGRESS`
+  * [ ] `COMPLETED`
+  * [ ] `CANCELLED`
+* [ ] Crear/usar correctamente `ride_status_history`
+* [ ] Endpoint para consultar historial
 * [ ] Probar flujo completo
 
-### Estados
+### Estados objetivo
 
 ```text
 REQUESTED
@@ -301,52 +390,59 @@ CANCELLED
 
 ---
 
-# ⏳ DÍA 9 — Authentication
+# 🟢 DÍA 9 — Authentication
 
 ## Registro
 
-* [ ] Crear `auth.controller.js`
-* [ ] Crear `auth.routes.js`
-* [ ] `POST /api/v1/auth/register`
-* [ ] Instalar `bcrypt`
-* [ ] Hash de contraseñas
-* [ ] Guardar `password_hash`
-* [ ] Validar email
-* [ ] Validar RUT
-* [ ] Validar usuario duplicado
+* [x] Crear `auth.controller.js`
+* [x] Crear `auth.routes.js`
+* [x] `POST /api/v1/auth/register`
+* [x] Instalar `bcrypt`
+* [x] Hash de contraseñas
+* [x] Guardar `password_hash`
+* [x] Validar campos obligatorios
+* [x] Validar RUT
+* [x] Validar email
+* [x] Validar usuario duplicado
+* [x] Probar registro exitoso
+* [x] Probar registro duplicado
+* [x] Probar password faltante
 
 ## Login
 
-* [ ] `POST /api/v1/auth/login`
-* [ ] Buscar usuario
-* [ ] `bcrypt.compare()`
-* [ ] Generar JWT
-* [ ] Devolver token
+* [x] `POST /api/v1/auth/login`
+* [x] Buscar usuario
+* [x] `bcrypt.compare()`
+* [x] Generar JWT
+* [x] Devolver token
+* [x] Probar login exitoso
+* [x] Probar credenciales inválidas
 
 ## JWT
 
-* [ ] Instalar `jsonwebtoken`
-* [ ] Crear JWT secret
-* [ ] Crear middleware de autenticación
-* [ ] Leer `Authorization: Bearer TOKEN`
-* [ ] Validar token
-* [ ] Crear `req.user`
+* [x] Instalar `jsonwebtoken`
+* [x] Configurar `JWT_SECRET`
+* [x] Crear middleware de autenticación
+* [x] Leer `Authorization: Bearer TOKEN`
+* [x] Validar token
+* [x] Crear `req.user`
+* [x] Validar token inválido
+* [x] Validar token ausente
+* [x] Validar token expirado
 
 ## Usuario autenticado
 
-* [ ] `GET /api/v1/users/me`
+* [x] Endpoint protegido `/api/v1/auth/me`
+* [x] Verificar usuario autenticado
 
 ## Roles
 
-* [ ] Middleware de roles
-* [ ] `PASSENGER`
-* [ ] `DRIVER`
-* [ ] `ADMIN`
-
-## Communities
-
-* [ ] Membership validation
-* [ ] Validar que Passenger pertenezca a Community
+* [x] Middleware `authorizeRoles`
+* [x] `PASSENGER`
+* [x] `DRIVER`
+* [x] `ADMIN`
+* [x] Probar acceso permitido
+* [x] Probar acceso prohibido
 
 ### Flujo
 
@@ -363,25 +459,33 @@ JWT
    ↓
 Authorization
    ↓
+Middleware
+   ↓
 req.user
 ```
 
 ---
 
-# ⏳ DÍA 10 — Maps + OSRM
+# 🟡 DÍA 10 — Maps + OSRM
 
 ## Routing
 
-* [ ] Configurar OSRM
-* [ ] Crear `maps.routes.js`
-* [ ] Crear `maps.controller.js`
-* [ ] Crear `routing.service.js`
+### Estructura creada
+
+* [x] Crear `maps.routes.js`
+* [x] Crear `maps.controller.js`
+* [x] Crear `routing.service.js`
+
+### Pendiente
+
+* [ ] Configurar integración OSRM
 * [ ] Crear `POST /api/v1/maps/route`
-* [ ] Enviar coordenadas
+* [ ] Validar coordenadas
 * [ ] Consultar OSRM
 * [ ] Obtener distancia
 * [ ] Obtener duración
 * [ ] Obtener geometría
+* [ ] Manejar errores de routing
 * [ ] Probar con Postman
 * [ ] Integrar routing con rides
 
@@ -393,6 +497,8 @@ Passenger
 Pickup + Destination
     ↓
 Maps API
+    ↓
+maps.controller
     ↓
 routing.service
     ↓
@@ -422,6 +528,7 @@ Distance + Duration + Geometry
 
 * [ ] Recibir latitud
 * [ ] Recibir longitud
+* [ ] Validar coordenadas
 * [ ] Guardar ubicación
 * [ ] Crear registros en `driver_locations`
 * [ ] Emitir actualización al Passenger
@@ -441,6 +548,19 @@ Node.js
 driver_locations
    ↓
 Passenger
+```
+
+### Decisión técnica
+
+First Trip utilizará inicialmente **WebSocket nativo**.
+
+Socket.IO queda como alternativa futura si necesitamos:
+
+```text
+rooms
+reconnection
+event abstraction
+fallback transports
 ```
 
 ---
@@ -560,7 +680,7 @@ CLOSED
 
 # 🎯 PRIMER VERTICAL SLICE
 
-El primer flujo completo que debe funcionar es:
+El flujo completo objetivo es:
 
 ```text
 Passenger
@@ -573,6 +693,8 @@ Request Ride
     ↓
 Ride REQUESTED
     ↓
+SEARCHING
+    ↓
 Driver ONLINE
     ↓
 Driver receives ride
@@ -580,6 +702,8 @@ Driver receives ride
 Accept
     ↓
 Vehicle associated
+    ↓
+ACCEPTED
     ↓
 DRIVER_ARRIVING
     ↓
@@ -634,7 +758,9 @@ COMPLETED
 └─────────────────────────────┘
 ```
 
-## Decisión técnica
+---
+
+# 🔐 DECISIONES TÉCNICAS
 
 First Trip utiliza:
 
@@ -643,10 +769,12 @@ Node.js
 Express
 PostgreSQL
 pg
+bcrypt
 JWT
 WebSocket
 OSRM
 Flutter
+OpenStreetMap
 ```
 
 First Trip **NO utiliza**:
@@ -654,47 +782,13 @@ First Trip **NO utiliza**:
 ```text
 Supabase
 Prisma
+Google Maps
+MySQL
 ```
 
 ---
 
 # 📁 ESTRUCTURA ACTUAL
-
-```text
-first_trip_backend/
-├── package.json
-├── package-lock.json
-├── .env
-├── .env.example
-├── .gitignore
-│
-└── src/
-    ├── server.js
-    ├── app.js
-    │
-    ├── config/
-    │   └── db.js
-    │
-    ├── routes/
-    │   ├── auth.routes.js
-    │   ├── maps.routes.js
-    │   ├── rides.routes.js
-    │   ├── users.routes.js
-    │   ├── communities.routes.js
-    │   └── drivers.routes.js
-    │
-    └── controllers/
-        ├── auth.controller.js
-        ├── maps.controller.js
-        ├── rides.controller.js
-        ├── users.controller.js
-        ├── communities.controller.js
-        └── drivers.controller.js
-```
-
----
-
-# 📁 ESTRUCTURA OBJETIVO
 
 ```text
 first_trip_backend/
@@ -704,42 +798,36 @@ first_trip_backend/
 │
 ├── scripts/
 │   ├── schema.sql
-│   └── test-db.js
+│   ├── test-db.js
+│   └── project-status.js
 │
 ├── src/
 │   ├── config/
 │   │   └── db.js
 │   │
-│   ├── routes/
-│   │   ├── auth.routes.js
-│   │   ├── users.routes.js
-│   │   ├── communities.routes.js
-│   │   ├── drivers.routes.js
-│   │   ├── vehicles.routes.js
-│   │   ├── rides.routes.js
-│   │   ├── maps.routes.js
-│   │   └── incidents.routes.js
-│   │
 │   ├── controllers/
 │   │   ├── auth.controller.js
-│   │   ├── users.controller.js
 │   │   ├── communities.controller.js
 │   │   ├── drivers.controller.js
-│   │   ├── vehicles.controller.js
-│   │   ├── rides.controller.js
 │   │   ├── maps.controller.js
-│   │   └── incidents.controller.js
-│   │
-│   ├── services/
-│   │   ├── routing.service.js
-│   │   └── ...
+│   │   ├── rides.controller.js
+│   │   ├── users.controller.js
+│   │   └── vehicles.controller.js
 │   │
 │   ├── middleware/
-│   │   ├── auth.middleware.js
-│   │   └── role.middleware.js
+│   │   └── auth.middleware.js
 │   │
-│   ├── websocket/
-│   │   └── ...
+│   ├── routes/
+│   │   ├── auth.routes.js
+│   │   ├── communities.routes.js
+│   │   ├── drivers.routes.js
+│   │   ├── maps.routes.js
+│   │   ├── rides.routes.js
+│   │   ├── users.routes.js
+│   │   └── vehicles.routes.js
+│   │
+│   ├── services/
+│   │   └── routing.service.js
 │   │
 │   ├── app.js
 │   └── server.js
@@ -751,8 +839,6 @@ first_trip_backend/
 └── package-lock.json
 ```
 
-> `services/`, `middleware/` y `websocket/` se incorporarán cuando realmente sean necesarios. No se crearán carpetas vacías solamente para cumplir una estructura.
-
 ---
 
 # 📊 ESTADO GENERAL ACTUAL
@@ -763,32 +849,133 @@ Día 2   ████████████████████ 100%
 Día 3   ████████████████████ 100%
 Día 4   ████████████████████ 100%
 Día 5   ████████████████████ 100%
-Día 6   ███████████████░░░░░  ~75%
-Día 7   ░░░░░░░░░░░░░░░░░░░░   0%
-Día 8   ░░░░░░░░░░░░░░░░░░░░   0%
-Día 9   ░░░░░░░░░░░░░░░░░░░░   0%
-Día 10  ░░░░░░░░░░░░░░░░░░░░   0%
+Día 6   ████████████████████ 100%
+Día 7   ████████████████████ 100%
+Día 8   █████████████████░░░ ~85%
+Día 9   ████████████████████ 100%
+Día 10  ██████░░░░░░░░░░░░░░ ~30%
 Día 11  ░░░░░░░░░░░░░░░░░░░░   0%
 Día 12  ░░░░░░░░░░░░░░░░░░░░   0%
 Día 13  ░░░░░░░░░░░░░░░░░░░░   0%
 ```
 
-**Próxima tarea concreta:**
+---
+
+# 🎯 CURRENT TASK
 
 ```text
-DÍA 6
-   ↓
-PATCH /api/v1/drivers/:id/status
-   ↓
-OFFLINE → ONLINE
-   ↓
-probar con curl
-   ↓
-probar con Postman
-   ↓
-cerrar Día 6
-   ↓
-DÍA 7 — Vehicles API
+DÍA 8 — ACCEPT RIDE
+        ↓
+Consolidar vehículo activo
+        ↓
+REQUESTED → SEARCHING
+        ↓
+PATCH /api/v1/rides/:id/accept
+        ↓
+Validar JWT
+        ↓
+Validar DRIVER
+        ↓
+Validar APPROVED
+        ↓
+Validar ONLINE
+        ↓
+Buscar vehículo activo
+        ↓
+SELECT ... FOR UPDATE
+        ↓
+PostgreSQL transaction
+        ↓
+Asignar Driver + Vehicle
+        ↓
+ACCEPTED
+        ↓
+ride_status_history
+```
+
+### Antes de implementar Accept Ride
+
+Debemos resolver:
+
+```text
+1. Un conductor puede tener varios vehículos.
+2. Solo uno debería estar activo.
+3. Accept Ride utilizará el vehículo activo.
+4. La aceptación debe ser transaccional.
+5. Dos conductores no pueden aceptar el mismo ride.
+6. El ride debe estar en SEARCHING.
 ```
 
 ---
+
+# 🚦 ESTADO DEL PROYECTO
+
+```text
+Database
+    ↓
+ONLINE
+
+PostgreSQL
+    ↓
+CONNECTED
+
+Node.js
+    ↓
+RUNNING
+
+Express
+    ↓
+RUNNING
+
+Authentication
+    ↓
+WORKING
+
+Drivers API
+    ↓
+WORKING
+
+Vehicles API
+    ↓
+WORKING
+
+Rides API
+    ↓
+WORKING
+
+Accept Ride
+    ↓
+NEXT
+
+WebSocket
+    ↓
+PENDING
+
+Flutter
+    ↓
+PENDING
+```
+
+---
+
+# 🚀 PRÓXIMO BLOQUE
+
+```text
+VEHICLES
+   ↓
+Regla vehículo activo
+   ↓
+RIDES
+   ↓
+REQUESTED → SEARCHING
+   ↓
+ACCEPT RIDE
+   ↓
+TRANSACTION
+   ↓
+DRIVER + VEHICLE
+   ↓
+ACCEPTED
+```
+
+> El objetivo inmediato no es agregar más endpoints indiscriminadamente. Es completar correctamente el flujo de negocio de un viaje, desde `REQUESTED` hasta `ACCEPTED`, antes de avanzar a tiempo real y Flutter.

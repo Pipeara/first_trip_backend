@@ -1,3 +1,4 @@
+
 import { pool } from "../config/db.js";
 
 
@@ -196,6 +197,8 @@ export async function createVehicle(req, res) {
 
 
 export async function updateVehicleActive(req, res) {
+    const client = await pool.connect();
+
     try {
         const { id } = req.params;
         const { active } = req.body;
@@ -206,7 +209,9 @@ export async function updateVehicleActive(req, res) {
             });
         }
 
-        const vehicleResult = await pool.query(
+        await client.query("BEGIN");
+
+        const vehicleResult = await client.query(
             `
             SELECT
                 id,
@@ -221,17 +226,42 @@ export async function updateVehicleActive(req, res) {
                 updated_at
             FROM vehicles
             WHERE id = $1
+            FOR UPDATE
             `,
             [id]
         );
 
         if (vehicleResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+
             return res.status(404).json({
                 message: "Vehículo no encontrado"
             });
         }
 
-        const result = await pool.query(
+        const vehicle = vehicleResult.rows[0];
+
+        /*
+         * Si estamos activando este vehículo,
+         * primero desactivamos cualquier otro vehículo
+         * activo del mismo conductor.
+         */
+        if (active === true) {
+            await client.query(
+                `
+                UPDATE vehicles
+                SET
+                    active = false,
+                    updated_at = NOW()
+                WHERE driver_id = $1
+                  AND id <> $2
+                  AND active = true
+                `,
+                [vehicle.driver_id, vehicle.id]
+            );
+        }
+
+        const result = await client.query(
             `
             UPDATE vehicles
             SET
@@ -253,12 +283,23 @@ export async function updateVehicleActive(req, res) {
             [active, id]
         );
 
+        await client.query("COMMIT");
+
         res.json({
             message: "Estado del vehículo actualizado correctamente",
             vehicle: result.rows[0]
         });
 
     } catch (error) {
+        try {
+            await client.query("ROLLBACK");
+        } catch (rollbackError) {
+            console.error(
+                "Error al hacer rollback:",
+                rollbackError.message
+            );
+        }
+
         console.error(
             "Error al actualizar estado del vehículo:",
             error.message
@@ -267,5 +308,8 @@ export async function updateVehicleActive(req, res) {
         res.status(500).json({
             message: "Error interno del servidor"
         });
+
+    } finally {
+        client.release();
     }
 }
