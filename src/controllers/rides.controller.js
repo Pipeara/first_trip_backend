@@ -1,3 +1,4 @@
+
 import { pool } from "../config/db.js";
 import { startRideSearch } from "../services/ride-search.service.js";
 
@@ -85,7 +86,6 @@ export async function getRideById(req, res) {
 
 export async function createRide(req, res) {
     try {
-
         const passengerId = req.user.userId;
 
         const {
@@ -98,13 +98,11 @@ export async function createRide(req, res) {
             destination_address
         } = req.body;
 
-
         if (!community_id) {
             return res.status(400).json({
                 message: "community_id es obligatorio"
             });
         }
-
 
         if (
             pickup_lat === undefined ||
@@ -115,13 +113,11 @@ export async function createRide(req, res) {
             });
         }
 
-
         if (!pickup_address) {
             return res.status(400).json({
                 message: "pickup_address es obligatorio"
             });
         }
-
 
         if (
             destination_lat === undefined ||
@@ -132,13 +128,11 @@ export async function createRide(req, res) {
             });
         }
 
-
         if (!destination_address) {
             return res.status(400).json({
                 message: "destination_address es obligatorio"
             });
         }
-
 
         const userResult = await pool.query(
             `
@@ -152,16 +146,13 @@ export async function createRide(req, res) {
             [passengerId]
         );
 
-
         if (userResult.rows.length === 0) {
             return res.status(404).json({
                 message: "Usuario no encontrado"
             });
         }
 
-
         const user = userResult.rows[0];
-
 
         if (user.role !== "PASSENGER") {
             return res.status(403).json({
@@ -169,13 +160,11 @@ export async function createRide(req, res) {
             });
         }
 
-
         if (user.status !== "ACTIVE") {
             return res.status(403).json({
                 message: "El usuario no está activo"
             });
         }
-
 
         const communityResult = await pool.query(
             `
@@ -189,23 +178,19 @@ export async function createRide(req, res) {
             [community_id]
         );
 
-
         if (communityResult.rows.length === 0) {
             return res.status(404).json({
                 message: "Community no encontrada"
             });
         }
 
-
         const community = communityResult.rows[0];
-
 
         if (!community.active) {
             return res.status(400).json({
                 message: "La Community no está activa"
             });
         }
-
 
         const membershipResult = await pool.query(
             `
@@ -219,19 +204,14 @@ export async function createRide(req, res) {
               AND user_id = $2
               AND membership_status = 'ACTIVE'
             `,
-            [
-                community_id,
-                passengerId
-            ]
+            [community_id, passengerId]
         );
-
 
         if (membershipResult.rows.length === 0) {
             return res.status(403).json({
                 message: "El usuario no pertenece a esta Community"
             });
         }
-
 
         const result = await pool.query(
             `
@@ -276,14 +256,12 @@ export async function createRide(req, res) {
             ]
         );
 
-
         res.status(201).json({
             message: "Viaje creado correctamente",
             ride: result.rows[0]
         });
 
     } catch (error) {
-
         console.error(
             "Error al crear viaje:",
             error.message
@@ -344,7 +322,6 @@ export async function acceptRide(req, res) {
             });
         }
 
-
         const driverResult = await client.query(
             `
             SELECT
@@ -369,7 +346,6 @@ export async function acceptRide(req, res) {
 
         const driver = driverResult.rows[0];
 
-
         if (driver.approval_status !== "APPROVED") {
             await client.query("ROLLBACK");
 
@@ -378,7 +354,6 @@ export async function acceptRide(req, res) {
             });
         }
 
-
         if (driver.status !== "ONLINE") {
             await client.query("ROLLBACK");
 
@@ -386,7 +361,6 @@ export async function acceptRide(req, res) {
                 message: "El conductor no está disponible"
             });
         }
-
 
         const vehicleResult = await client.query(
             `
@@ -417,7 +391,6 @@ export async function acceptRide(req, res) {
 
         const vehicle = vehicleResult.rows[0];
 
-
         const rideResult = await client.query(
             `
             SELECT
@@ -446,7 +419,6 @@ export async function acceptRide(req, res) {
 
         const ride = rideResult.rows[0];
 
-
         if (ride.status !== "SEARCHING") {
             await client.query("ROLLBACK");
 
@@ -455,7 +427,6 @@ export async function acceptRide(req, res) {
                 current_status: ride.status
             });
         }
-
 
         const updateRideResult = await client.query(
             `
@@ -486,13 +457,8 @@ export async function acceptRide(req, res) {
                 created_at,
                 updated_at
             `,
-            [
-                driver.id,
-                vehicle.id,
-                id
-            ]
+            [driver.id, vehicle.id, id]
         );
-
 
         await client.query(
             `
@@ -505,7 +471,6 @@ export async function acceptRide(req, res) {
             [driver.id]
         );
 
-
         await client.query(
             `
             INSERT INTO ride_status_history (
@@ -515,16 +480,10 @@ export async function acceptRide(req, res) {
             )
             VALUES ($1, $2, $3)
             `,
-            [
-                id,
-                "ACCEPTED",
-                userId
-            ]
+            [id, "ACCEPTED", userId]
         );
 
-
         await client.query("COMMIT");
-
 
         res.json({
             message: "Viaje aceptado correctamente",
@@ -542,7 +501,6 @@ export async function acceptRide(req, res) {
         });
 
     } catch (error) {
-
         await client.query("ROLLBACK");
 
         console.error(
@@ -577,7 +535,6 @@ export async function searchRide(req, res) {
         });
 
     } catch (error) {
-
         console.error(
             "Error al iniciar búsqueda de conductores:",
             error.message
@@ -608,10 +565,7 @@ export async function arrivingRide(req, res) {
 
         const userResult = await client.query(
             `
-            SELECT
-                id,
-                role,
-                status
+            SELECT id, role, status
             FROM users
             WHERE id = $1
             FOR UPDATE
@@ -647,11 +601,7 @@ export async function arrivingRide(req, res) {
 
         const driverResult = await client.query(
             `
-            SELECT
-                id,
-                user_id,
-                approval_status,
-                status
+            SELECT id, user_id, approval_status, status
             FROM drivers
             WHERE user_id = $1
             FOR UPDATE
@@ -746,24 +696,7 @@ export async function arrivingRide(req, res) {
                 status = 'DRIVER_ARRIVING',
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING
-                id,
-                passenger_id,
-                driver_id,
-                vehicle_id,
-                community_id,
-                pickup_lat,
-                pickup_lng,
-                pickup_address,
-                destination_lat,
-                destination_lng,
-                destination_address,
-                status,
-                scheduled_at,
-                requested_at,
-                accepted_at,
-                created_at,
-                updated_at
+            RETURNING *
             `,
             [id]
         );
@@ -777,11 +710,7 @@ export async function arrivingRide(req, res) {
             )
             VALUES ($1, $2, $3)
             `,
-            [
-                id,
-                "DRIVER_ARRIVING",
-                userId
-            ]
+            [id, "DRIVER_ARRIVING", userId]
         );
 
         await client.query("COMMIT");
@@ -792,7 +721,6 @@ export async function arrivingRide(req, res) {
         });
 
     } catch (error) {
-
         await client.query("ROLLBACK");
 
         console.error(
@@ -821,10 +749,7 @@ export async function waitingRide(req, res) {
 
         const userResult = await client.query(
             `
-            SELECT
-                id,
-                role,
-                status
+            SELECT id, role, status
             FROM users
             WHERE id = $1
             FOR UPDATE
@@ -860,11 +785,7 @@ export async function waitingRide(req, res) {
 
         const driverResult = await client.query(
             `
-            SELECT
-                id,
-                user_id,
-                approval_status,
-                status
+            SELECT id, user_id, approval_status, status
             FROM drivers
             WHERE user_id = $1
             FOR UPDATE
@@ -959,24 +880,7 @@ export async function waitingRide(req, res) {
                 status = 'DRIVER_WAITING',
                 updated_at = NOW()
             WHERE id = $1
-            RETURNING
-                id,
-                passenger_id,
-                driver_id,
-                vehicle_id,
-                community_id,
-                pickup_lat,
-                pickup_lng,
-                pickup_address,
-                destination_lat,
-                destination_lng,
-                destination_address,
-                status,
-                scheduled_at,
-                requested_at,
-                accepted_at,
-                created_at,
-                updated_at
+            RETURNING *
             `,
             [id]
         );
@@ -990,11 +894,7 @@ export async function waitingRide(req, res) {
             )
             VALUES ($1, $2, $3)
             `,
-            [
-                id,
-                "DRIVER_WAITING",
-                userId
-            ]
+            [id, "DRIVER_WAITING", userId]
         );
 
         await client.query("COMMIT");
@@ -1005,11 +905,546 @@ export async function waitingRide(req, res) {
         });
 
     } catch (error) {
-
         await client.query("ROLLBACK");
 
         console.error(
             "Error al marcar viaje como DRIVER_WAITING:",
+            error.message
+        );
+
+        return res.status(500).json({
+            message: "Error interno del servidor"
+        });
+
+    } finally {
+        client.release();
+    }
+}
+
+
+export async function startRide(req, res) {
+    const client = await pool.connect();
+
+    try {
+        const { id } = req.params;
+        const userId = req.user.userId;
+
+        await client.query("BEGIN");
+
+        const driverResult = await client.query(
+            `
+            SELECT
+                d.id,
+                d.user_id,
+                d.approval_status,
+                d.status,
+                u.role,
+                u.status AS user_status
+            FROM drivers d
+            INNER JOIN users u ON u.id = d.user_id
+            WHERE d.user_id = $1
+            FOR UPDATE
+            `,
+            [userId]
+        );
+
+        if (driverResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+
+            return res.status(404).json({
+                message: "Conductor no encontrado"
+            });
+        }
+
+        const driver = driverResult.rows[0];
+
+        if (driver.role !== "DRIVER") {
+            await client.query("ROLLBACK");
+
+            return res.status(403).json({
+                message: "Solo un DRIVER puede iniciar un viaje"
+            });
+        }
+
+        if (driver.user_status !== "ACTIVE") {
+            await client.query("ROLLBACK");
+
+            return res.status(403).json({
+                message: "El usuario no está activo"
+            });
+        }
+
+        if (driver.approval_status !== "APPROVED") {
+            await client.query("ROLLBACK");
+
+            return res.status(403).json({
+                message: "El conductor no está aprobado"
+            });
+        }
+
+        if (driver.status !== "BUSY") {
+            await client.query("ROLLBACK");
+
+            return res.status(409).json({
+                message: "El conductor no está ocupado con un viaje"
+            });
+        }
+
+        const rideResult = await client.query(
+            `
+            SELECT *
+            FROM rides
+            WHERE id = $1
+            FOR UPDATE
+            `,
+            [id]
+        );
+
+        if (rideResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+
+            return res.status(404).json({
+                message: "Viaje no encontrado"
+            });
+        }
+
+        const ride = rideResult.rows[0];
+
+        if (ride.driver_id !== driver.id) {
+            await client.query("ROLLBACK");
+
+            return res.status(403).json({
+                message: "El conductor no está asignado a este viaje"
+            });
+        }
+
+        if (ride.status !== "DRIVER_WAITING") {
+            await client.query("ROLLBACK");
+
+            return res.status(409).json({
+                message: "El viaje no está en estado DRIVER_WAITING",
+                current_status: ride.status
+            });
+        }
+
+        const updateRideResult = await client.query(
+            `
+            UPDATE rides
+            SET
+                status = 'IN_PROGRESS',
+                started_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+            `,
+            [id]
+        );
+
+        await client.query(
+            `
+            INSERT INTO ride_status_history (
+                ride_id,
+                status,
+                changed_by
+            )
+            VALUES ($1, $2, $3)
+            `,
+            [id, "IN_PROGRESS", userId]
+        );
+
+        await client.query("COMMIT");
+
+        return res.status(200).json({
+            message: "El viaje ha comenzado",
+            ride: updateRideResult.rows[0]
+        });
+
+    } catch (error) {
+        await client.query("ROLLBACK");
+
+        console.error(
+            "Error al iniciar viaje:",
+            error.message
+        );
+
+        return res.status(500).json({
+            message: "Error interno del servidor"
+        });
+
+    } finally {
+        client.release();
+    }
+}
+
+
+export async function completeRide(req, res) {
+    const client = await pool.connect();
+
+    try {
+        const { id } = req.params;
+        const userId = req.user.userId;
+
+        await client.query("BEGIN");
+
+        const driverResult = await client.query(
+            `
+            SELECT
+                d.id,
+                d.user_id,
+                d.approval_status,
+                d.status,
+                u.role,
+                u.status AS user_status
+            FROM drivers d
+            INNER JOIN users u ON u.id = d.user_id
+            WHERE d.user_id = $1
+            FOR UPDATE
+            `,
+            [userId]
+        );
+
+        if (driverResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+
+            return res.status(404).json({
+                message: "Conductor no encontrado"
+            });
+        }
+
+        const driver = driverResult.rows[0];
+
+        if (driver.role !== "DRIVER") {
+            await client.query("ROLLBACK");
+
+            return res.status(403).json({
+                message: "Solo un DRIVER puede completar un viaje"
+            });
+        }
+
+        if (driver.user_status !== "ACTIVE") {
+            await client.query("ROLLBACK");
+
+            return res.status(403).json({
+                message: "El usuario no está activo"
+            });
+        }
+
+        if (driver.approval_status !== "APPROVED") {
+            await client.query("ROLLBACK");
+
+            return res.status(403).json({
+                message: "El conductor no está aprobado"
+            });
+        }
+
+        if (driver.status !== "BUSY") {
+            await client.query("ROLLBACK");
+
+            return res.status(409).json({
+                message: "El conductor no está ocupado con un viaje"
+            });
+        }
+
+        const rideResult = await client.query(
+            `
+            SELECT *
+            FROM rides
+            WHERE id = $1
+            FOR UPDATE
+            `,
+            [id]
+        );
+
+        if (rideResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+
+            return res.status(404).json({
+                message: "Viaje no encontrado"
+            });
+        }
+
+        const ride = rideResult.rows[0];
+
+        if (ride.driver_id !== driver.id) {
+            await client.query("ROLLBACK");
+
+            return res.status(403).json({
+                message: "El conductor no está asignado a este viaje"
+            });
+        }
+
+        if (ride.status !== "IN_PROGRESS") {
+            await client.query("ROLLBACK");
+
+            return res.status(409).json({
+                message: "El viaje no está en estado IN_PROGRESS",
+                current_status: ride.status
+            });
+        }
+
+        const updateRideResult = await client.query(
+            `
+            UPDATE rides
+            SET
+                status = 'COMPLETED',
+                completed_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+            `,
+            [id]
+        );
+
+        await client.query(
+            `
+            INSERT INTO ride_status_history (
+                ride_id,
+                status,
+                changed_by
+            )
+            VALUES ($1, $2, $3)
+            `,
+            [id, "COMPLETED", userId]
+        );
+
+        await client.query(
+            `
+            UPDATE drivers
+            SET
+                status = 'ONLINE',
+                updated_at = NOW()
+            WHERE id = $1
+            `,
+            [driver.id]
+        );
+
+        await client.query("COMMIT");
+
+        return res.status(200).json({
+            message: "El viaje ha sido completado",
+            ride: updateRideResult.rows[0],
+            driver: {
+                id: driver.id,
+                status: "ONLINE"
+            }
+        });
+
+    } catch (error) {
+        await client.query("ROLLBACK");
+
+        console.error(
+            "Error al completar viaje:",
+            error.message
+        );
+
+        return res.status(500).json({
+            message: "Error interno del servidor"
+        });
+
+    } finally {
+        client.release();
+    }
+}
+
+
+export async function cancelRide(req, res) {
+    const client = await pool.connect();
+
+    try {
+        const { id } = req.params;
+        const userId = req.user.userId;
+        const userRole = req.user.role;
+
+        await client.query("BEGIN");
+
+        const rideResult = await client.query(
+            `
+            SELECT *
+            FROM rides
+            WHERE id = $1
+            FOR UPDATE
+            `,
+            [id]
+        );
+
+        if (rideResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+
+            return res.status(404).json({
+                message: "Viaje no encontrado"
+            });
+        }
+
+        const ride = rideResult.rows[0];
+
+        const cancellableStatuses = [
+            "REQUESTED",
+            "SEARCHING",
+            "ACCEPTED",
+            "DRIVER_ARRIVING",
+            "DRIVER_WAITING"
+        ];
+
+        if (!cancellableStatuses.includes(ride.status)) {
+            await client.query("ROLLBACK");
+
+            return res.status(409).json({
+                message: "El viaje no puede ser cancelado en su estado actual",
+                current_status: ride.status
+            });
+        }
+
+        let driver = null;
+
+        if (userRole === "PASSENGER") {
+            if (ride.passenger_id !== userId) {
+                await client.query("ROLLBACK");
+
+                return res.status(403).json({
+                    message: "No puedes cancelar este viaje"
+                });
+            }
+
+            if (ride.driver_id) {
+                const driverResult = await client.query(
+                    `
+                    SELECT
+                        id,
+                        user_id,
+                        status,
+                        approval_status
+                    FROM drivers
+                    WHERE id = $1
+                    FOR UPDATE
+                    `,
+                    [ride.driver_id]
+                );
+
+                if (driverResult.rows.length === 0) {
+                    await client.query("ROLLBACK");
+
+                    return res.status(404).json({
+                        message: "Conductor asignado no encontrado"
+                    });
+                }
+
+                driver = driverResult.rows[0];
+
+                if (driver.status !== "BUSY") {
+                    await client.query("ROLLBACK");
+
+                    return res.status(409).json({
+                        message: "El conductor asignado no está en estado BUSY"
+                    });
+                }
+            }
+
+        } else if (userRole === "DRIVER") {
+            const driverResult = await client.query(
+                `
+                SELECT
+                    id,
+                    user_id,
+                    status,
+                    approval_status
+                FROM drivers
+                WHERE user_id = $1
+                FOR UPDATE
+                `,
+                [userId]
+            );
+
+            if (driverResult.rows.length === 0) {
+                await client.query("ROLLBACK");
+
+                return res.status(404).json({
+                    message: "Conductor no encontrado"
+                });
+            }
+
+            driver = driverResult.rows[0];
+
+            if (ride.driver_id !== driver.id) {
+                await client.query("ROLLBACK");
+
+                return res.status(403).json({
+                    message: "El conductor no está asignado a este viaje"
+                });
+            }
+
+            if (driver.approval_status !== "APPROVED") {
+                await client.query("ROLLBACK");
+
+                return res.status(403).json({
+                    message: "El conductor no está aprobado"
+                });
+            }
+
+            if (driver.status !== "BUSY") {
+                await client.query("ROLLBACK");
+
+                return res.status(409).json({
+                    message: "El conductor no está en estado BUSY"
+                });
+            }
+        }
+
+        const updateRideResult = await client.query(
+            `
+            UPDATE rides
+            SET
+                status = 'CANCELLED',
+                cancelled_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+            `,
+            [id]
+        );
+
+        await client.query(
+            `
+            INSERT INTO ride_status_history (
+                ride_id,
+                status,
+                changed_by
+            )
+            VALUES ($1, $2, $3)
+            `,
+            [id, "CANCELLED", userId]
+        );
+
+        if (driver) {
+            await client.query(
+                `
+                UPDATE drivers
+                SET
+                    status = 'ONLINE',
+                    updated_at = NOW()
+                WHERE id = $1
+                `,
+                [driver.id]
+            );
+        }
+
+        await client.query("COMMIT");
+
+        return res.status(200).json({
+            message: "El viaje ha sido cancelado",
+            ride: updateRideResult.rows[0],
+            driver: driver
+                ? {
+                    id: driver.id,
+                    status: "ONLINE"
+                }
+                : null
+        });
+
+    } catch (error) {
+        await client.query("ROLLBACK");
+
+        console.error(
+            "Error al cancelar viaje:",
             error.message
         );
 

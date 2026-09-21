@@ -1,3 +1,4 @@
+
 import express from "express";
 
 import {
@@ -12,7 +13,10 @@ import {
     acceptRide,
     searchRide,
     arrivingRide,
-    waitingRide
+    waitingRide,
+    startRide,
+    completeRide,
+    cancelRide
 } from "../controllers/rides.controller.js";
 
 const router = express.Router();
@@ -55,4 +59,27 @@ router.patch(
     waitingRide
 );
 
+router.patch(
+    "/:id/start",
+    authenticateToken,
+    authorizeRoles("DRIVER"),
+    startRide
+);
+
+router.patch(
+    "/:id/complete",
+    authenticateToken,
+    authorizeRoles("DRIVER"),
+    completeRide
+);
+
+router.patch(
+    "/:id/cancel",
+    authenticateToken,
+    authorizeRoles("PASSENGER", "DRIVER"),
+    cancelRide
+);
+
 export default router;
+
+
