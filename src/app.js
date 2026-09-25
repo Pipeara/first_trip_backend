@@ -1,4 +1,3 @@
-
 import express from "express";
 
 import cors from "cors";
@@ -19,6 +18,8 @@ import driversRoutes from "./routes/drivers.routes.js";
 import vehiclesRoutes from "./routes/vehicles.routes.js";
 
 import authRoutes from "./routes/auth.routes.js";
+
+import mapsRoutes from "./routes/maps.routes.js";
 
 
 const app = express();
@@ -89,6 +90,7 @@ app.use("/api/v1/vehicles", vehiclesRoutes);
 
 app.use("/api/v1/auth", authRoutes);
 
+app.use("/api/v1/maps", mapsRoutes);
+
 
 export default app;
-

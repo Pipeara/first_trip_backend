@@ -1,7 +1,9 @@
+
 import { pool } from "../config/db.js";
+import { addRideStatusHistory } from "./ride-history.service.js";
 
 
-export async function startRideSearch(rideId) {
+export async function startRideSearch(rideId, changedBy = null) {
     const client = await pool.connect();
 
     try {
@@ -116,21 +118,11 @@ export async function startRideSearch(rideId) {
 
 
         // 6. Registrar transición
-        await client.query(
-            `
-            INSERT INTO ride_status_history (
-                ride_id,
-                status,
-                changed_by
-            )
-            VALUES ($1, $2, $3)
-            `,
-            [
-                rideId,
-                "SEARCHING",
-                null
-            ]
-        );
+        await addRideStatusHistory(client, {
+            rideId,
+            status: "SEARCHING",
+            changedBy
+        });
 
 
         await client.query("COMMIT");
@@ -156,3 +148,4 @@ export async function startRideSearch(rideId) {
 
     }
 }
+

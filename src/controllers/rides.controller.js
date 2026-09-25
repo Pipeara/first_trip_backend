@@ -1,6 +1,7 @@
 
 import { pool } from "../config/db.js";
 import { startRideSearch } from "../services/ride-search.service.js";
+import { addRideStatusHistory } from "../services/ride-history.service.js";
 
 
 export async function getRides(req, res) {
@@ -25,7 +26,10 @@ export async function getRides(req, res) {
         });
 
     } catch (error) {
-        console.error("Error al obtener viajes:", error.message);
+        console.error(
+            "Error al obtener viajes:",
+            error.message
+        );
 
         res.status(500).json({
             message: "Error interno del servidor"
@@ -75,7 +79,10 @@ export async function getRideById(req, res) {
         });
 
     } catch (error) {
-        console.error("Error al obtener viaje:", error.message);
+        console.error(
+            "Error al obtener viaje:",
+            error.message
+        );
 
         res.status(500).json({
             message: "Error interno del servidor"
@@ -85,6 +92,8 @@ export async function getRideById(req, res) {
 
 
 export async function createRide(req, res) {
+    const client = await pool.connect();
+
     try {
         const passengerId = req.user.userId;
 
@@ -97,6 +106,9 @@ export async function createRide(req, res) {
             destination_lng,
             destination_address
         } = req.body;
+
+
+        // 1. Validaciones básicas
 
         if (!community_id) {
             return res.status(400).json({
@@ -134,7 +146,10 @@ export async function createRide(req, res) {
             });
         }
 
-        const userResult = await pool.query(
+
+        // 2. Validar usuario
+
+        const userResult = await client.query(
             `
             SELECT
                 id,
@@ -166,7 +181,10 @@ export async function createRide(req, res) {
             });
         }
 
-        const communityResult = await pool.query(
+
+        // 3. Validar Community
+
+        const communityResult = await client.query(
             `
             SELECT
                 id,
@@ -192,7 +210,10 @@ export async function createRide(req, res) {
             });
         }
 
-        const membershipResult = await pool.query(
+
+        // 4. Validar membresía
+
+        const membershipResult = await client.query(
             `
             SELECT
                 id,
@@ -213,7 +234,13 @@ export async function createRide(req, res) {
             });
         }
 
-        const result = await pool.query(
+
+        // 5. Crear viaje + historial REQUESTED
+        //    Todo dentro de una misma transacción.
+
+        await client.query("BEGIN");
+
+        const result = await client.query(
             `
             INSERT INTO rides (
                 passenger_id,
@@ -256,12 +283,34 @@ export async function createRide(req, res) {
             ]
         );
 
+        const ride = result.rows[0];
+
+
+        // 6. Registrar REQUESTED
+
+        await addRideStatusHistory(client, {
+            rideId: ride.id,
+            status: "REQUESTED",
+            changedBy: passengerId
+        });
+
+
+        // 7. Confirmar transacción
+
+        await client.query("COMMIT");
+
+
         res.status(201).json({
             message: "Viaje creado correctamente",
-            ride: result.rows[0]
+            ride
         });
 
     } catch (error) {
+
+        try {
+            await client.query("ROLLBACK");
+        } catch {}
+
         console.error(
             "Error al crear viaje:",
             error.message
@@ -270,6 +319,9 @@ export async function createRide(req, res) {
         res.status(500).json({
             message: "Error interno del servidor"
         });
+
+    } finally {
+        client.release();
     }
 }
 
@@ -282,6 +334,9 @@ export async function acceptRide(req, res) {
         const userId = req.user.userId;
 
         await client.query("BEGIN");
+
+
+        // 1. Bloquear usuario
 
         const userResult = await client.query(
             `
@@ -321,6 +376,9 @@ export async function acceptRide(req, res) {
                 message: "El usuario no está activo"
             });
         }
+
+
+        // 2. Bloquear conductor
 
         const driverResult = await client.query(
             `
@@ -362,6 +420,9 @@ export async function acceptRide(req, res) {
             });
         }
 
+
+        // 3. Buscar vehículo activo
+
         const vehicleResult = await client.query(
             `
             SELECT
@@ -390,6 +451,9 @@ export async function acceptRide(req, res) {
         }
 
         const vehicle = vehicleResult.rows[0];
+
+
+        // 4. Bloquear viaje
 
         const rideResult = await client.query(
             `
@@ -428,6 +492,9 @@ export async function acceptRide(req, res) {
             });
         }
 
+
+        // 5. Asignar conductor y vehículo
+
         const updateRideResult = await client.query(
             `
             UPDATE rides
@@ -460,6 +527,9 @@ export async function acceptRide(req, res) {
             [driver.id, vehicle.id, id]
         );
 
+
+        // 6. Driver BUSY
+
         await client.query(
             `
             UPDATE drivers
@@ -471,19 +541,18 @@ export async function acceptRide(req, res) {
             [driver.id]
         );
 
-        await client.query(
-            `
-            INSERT INTO ride_status_history (
-                ride_id,
-                status,
-                changed_by
-            )
-            VALUES ($1, $2, $3)
-            `,
-            [id, "ACCEPTED", userId]
-        );
+
+        // 7. Historial ACCEPTED
+
+        await addRideStatusHistory(client, {
+            rideId: id,
+            status: "ACCEPTED",
+            changedBy: userId
+        });
+
 
         await client.query("COMMIT");
+
 
         res.json({
             message: "Viaje aceptado correctamente",
@@ -501,6 +570,7 @@ export async function acceptRide(req, res) {
         });
 
     } catch (error) {
+
         await client.query("ROLLBACK");
 
         console.error(
@@ -521,8 +591,12 @@ export async function acceptRide(req, res) {
 export async function searchRide(req, res) {
     try {
         const { id } = req.params;
+        const userId = req.user.userId;
 
-        const result = await startRideSearch(id);
+        const result = await startRideSearch(
+            id,
+            userId
+        );
 
         res.json({
             message: result.searching
@@ -563,9 +637,15 @@ export async function arrivingRide(req, res) {
 
         await client.query("BEGIN");
 
+
+        // 1. Validar usuario
+
         const userResult = await client.query(
             `
-            SELECT id, role, status
+            SELECT
+                id,
+                role,
+                status
             FROM users
             WHERE id = $1
             FOR UPDATE
@@ -587,7 +667,8 @@ export async function arrivingRide(req, res) {
             await client.query("ROLLBACK");
 
             return res.status(403).json({
-                message: "Solo un DRIVER puede marcar un viaje como DRIVER_ARRIVING"
+                message:
+                    "Solo un DRIVER puede marcar un viaje como DRIVER_ARRIVING"
             });
         }
 
@@ -599,9 +680,16 @@ export async function arrivingRide(req, res) {
             });
         }
 
+
+        // 2. Validar conductor
+
         const driverResult = await client.query(
             `
-            SELECT id, user_id, approval_status, status
+            SELECT
+                id,
+                user_id,
+                approval_status,
+                status
             FROM drivers
             WHERE user_id = $1
             FOR UPDATE
@@ -634,6 +722,9 @@ export async function arrivingRide(req, res) {
                 message: "El conductor no está ocupado con un viaje"
             });
         }
+
+
+        // 3. Bloquear viaje
 
         const rideResult = await client.query(
             `
@@ -689,6 +780,9 @@ export async function arrivingRide(req, res) {
             });
         }
 
+
+        // 4. Actualizar viaje
+
         const updateRideResult = await client.query(
             `
             UPDATE rides
@@ -701,19 +795,18 @@ export async function arrivingRide(req, res) {
             [id]
         );
 
-        await client.query(
-            `
-            INSERT INTO ride_status_history (
-                ride_id,
-                status,
-                changed_by
-            )
-            VALUES ($1, $2, $3)
-            `,
-            [id, "DRIVER_ARRIVING", userId]
-        );
+
+        // 5. Historial
+
+        await addRideStatusHistory(client, {
+            rideId: id,
+            status: "DRIVER_ARRIVING",
+            changedBy: userId
+        });
+
 
         await client.query("COMMIT");
+
 
         return res.status(200).json({
             message: "El conductor está en camino",
@@ -721,6 +814,7 @@ export async function arrivingRide(req, res) {
         });
 
     } catch (error) {
+
         await client.query("ROLLBACK");
 
         console.error(
@@ -747,9 +841,15 @@ export async function waitingRide(req, res) {
 
         await client.query("BEGIN");
 
+
+        // 1. Validar usuario
+
         const userResult = await client.query(
             `
-            SELECT id, role, status
+            SELECT
+                id,
+                role,
+                status
             FROM users
             WHERE id = $1
             FOR UPDATE
@@ -771,7 +871,8 @@ export async function waitingRide(req, res) {
             await client.query("ROLLBACK");
 
             return res.status(403).json({
-                message: "Solo un DRIVER puede marcar un viaje como DRIVER_WAITING"
+                message:
+                    "Solo un DRIVER puede marcar un viaje como DRIVER_WAITING"
             });
         }
 
@@ -783,9 +884,16 @@ export async function waitingRide(req, res) {
             });
         }
 
+
+        // 2. Validar conductor
+
         const driverResult = await client.query(
             `
-            SELECT id, user_id, approval_status, status
+            SELECT
+                id,
+                user_id,
+                approval_status,
+                status
             FROM drivers
             WHERE user_id = $1
             FOR UPDATE
@@ -818,6 +926,9 @@ export async function waitingRide(req, res) {
                 message: "El conductor no está ocupado con un viaje"
             });
         }
+
+
+        // 3. Bloquear viaje
 
         const rideResult = await client.query(
             `
@@ -868,10 +979,14 @@ export async function waitingRide(req, res) {
             await client.query("ROLLBACK");
 
             return res.status(409).json({
-                message: "El viaje no está en estado DRIVER_ARRIVING",
+                message:
+                    "El viaje no está en estado DRIVER_ARRIVING",
                 current_status: ride.status
             });
         }
+
+
+        // 4. Actualizar viaje
 
         const updateRideResult = await client.query(
             `
@@ -885,26 +1000,27 @@ export async function waitingRide(req, res) {
             [id]
         );
 
-        await client.query(
-            `
-            INSERT INTO ride_status_history (
-                ride_id,
-                status,
-                changed_by
-            )
-            VALUES ($1, $2, $3)
-            `,
-            [id, "DRIVER_WAITING", userId]
-        );
+
+        // 5. Historial
+
+        await addRideStatusHistory(client, {
+            rideId: id,
+            status: "DRIVER_WAITING",
+            changedBy: userId
+        });
+
 
         await client.query("COMMIT");
 
+
         return res.status(200).json({
-            message: "El conductor ha llegado y está esperando al pasajero",
+            message:
+                "El conductor ha llegado y está esperando al pasajero",
             ride: updateRideResult.rows[0]
         });
 
     } catch (error) {
+
         await client.query("ROLLBACK");
 
         console.error(
@@ -931,6 +1047,9 @@ export async function startRide(req, res) {
 
         await client.query("BEGIN");
 
+
+        // 1. Validar conductor
+
         const driverResult = await client.query(
             `
             SELECT
@@ -941,7 +1060,8 @@ export async function startRide(req, res) {
                 u.role,
                 u.status AS user_status
             FROM drivers d
-            INNER JOIN users u ON u.id = d.user_id
+            INNER JOIN users u
+                ON u.id = d.user_id
             WHERE d.user_id = $1
             FOR UPDATE
             `,
@@ -990,6 +1110,9 @@ export async function startRide(req, res) {
             });
         }
 
+
+        // 2. Bloquear viaje
+
         const rideResult = await client.query(
             `
             SELECT *
@@ -1022,10 +1145,14 @@ export async function startRide(req, res) {
             await client.query("ROLLBACK");
 
             return res.status(409).json({
-                message: "El viaje no está en estado DRIVER_WAITING",
+                message:
+                    "El viaje no está en estado DRIVER_WAITING",
                 current_status: ride.status
             });
         }
+
+
+        // 3. Iniciar viaje
 
         const updateRideResult = await client.query(
             `
@@ -1040,19 +1167,18 @@ export async function startRide(req, res) {
             [id]
         );
 
-        await client.query(
-            `
-            INSERT INTO ride_status_history (
-                ride_id,
-                status,
-                changed_by
-            )
-            VALUES ($1, $2, $3)
-            `,
-            [id, "IN_PROGRESS", userId]
-        );
+
+        // 4. Historial
+
+        await addRideStatusHistory(client, {
+            rideId: id,
+            status: "IN_PROGRESS",
+            changedBy: userId
+        });
+
 
         await client.query("COMMIT");
+
 
         return res.status(200).json({
             message: "El viaje ha comenzado",
@@ -1060,6 +1186,7 @@ export async function startRide(req, res) {
         });
 
     } catch (error) {
+
         await client.query("ROLLBACK");
 
         console.error(
@@ -1086,6 +1213,9 @@ export async function completeRide(req, res) {
 
         await client.query("BEGIN");
 
+
+        // 1. Validar conductor
+
         const driverResult = await client.query(
             `
             SELECT
@@ -1096,7 +1226,8 @@ export async function completeRide(req, res) {
                 u.role,
                 u.status AS user_status
             FROM drivers d
-            INNER JOIN users u ON u.id = d.user_id
+            INNER JOIN users u
+                ON u.id = d.user_id
             WHERE d.user_id = $1
             FOR UPDATE
             `,
@@ -1145,6 +1276,9 @@ export async function completeRide(req, res) {
             });
         }
 
+
+        // 2. Bloquear viaje
+
         const rideResult = await client.query(
             `
             SELECT *
@@ -1177,10 +1311,14 @@ export async function completeRide(req, res) {
             await client.query("ROLLBACK");
 
             return res.status(409).json({
-                message: "El viaje no está en estado IN_PROGRESS",
+                message:
+                    "El viaje no está en estado IN_PROGRESS",
                 current_status: ride.status
             });
         }
+
+
+        // 3. Completar viaje
 
         const updateRideResult = await client.query(
             `
@@ -1195,17 +1333,17 @@ export async function completeRide(req, res) {
             [id]
         );
 
-        await client.query(
-            `
-            INSERT INTO ride_status_history (
-                ride_id,
-                status,
-                changed_by
-            )
-            VALUES ($1, $2, $3)
-            `,
-            [id, "COMPLETED", userId]
-        );
+
+        // 4. Historial
+
+        await addRideStatusHistory(client, {
+            rideId: id,
+            status: "COMPLETED",
+            changedBy: userId
+        });
+
+
+        // 5. Liberar conductor
 
         await client.query(
             `
@@ -1218,7 +1356,9 @@ export async function completeRide(req, res) {
             [driver.id]
         );
 
+
         await client.query("COMMIT");
+
 
         return res.status(200).json({
             message: "El viaje ha sido completado",
@@ -1230,6 +1370,7 @@ export async function completeRide(req, res) {
         });
 
     } catch (error) {
+
         await client.query("ROLLBACK");
 
         console.error(
@@ -1257,6 +1398,9 @@ export async function cancelRide(req, res) {
 
         await client.query("BEGIN");
 
+
+        // 1. Bloquear viaje
+
         const rideResult = await client.query(
             `
             SELECT *
@@ -1277,6 +1421,9 @@ export async function cancelRide(req, res) {
 
         const ride = rideResult.rows[0];
 
+
+        // 2. Estados cancelables
+
         const cancellableStatuses = [
             "REQUESTED",
             "SEARCHING",
@@ -1289,14 +1436,20 @@ export async function cancelRide(req, res) {
             await client.query("ROLLBACK");
 
             return res.status(409).json({
-                message: "El viaje no puede ser cancelado en su estado actual",
+                message:
+                    "El viaje no puede ser cancelado en su estado actual",
                 current_status: ride.status
             });
         }
 
+
         let driver = null;
 
+
+        // 3. Passenger cancela
+
         if (userRole === "PASSENGER") {
+
             if (ride.passenger_id !== userId) {
                 await client.query("ROLLBACK");
 
@@ -1306,6 +1459,7 @@ export async function cancelRide(req, res) {
             }
 
             if (ride.driver_id) {
+
                 const driverResult = await client.query(
                     `
                     SELECT
@@ -1334,12 +1488,17 @@ export async function cancelRide(req, res) {
                     await client.query("ROLLBACK");
 
                     return res.status(409).json({
-                        message: "El conductor asignado no está en estado BUSY"
+                        message:
+                            "El conductor asignado no está en estado BUSY"
                     });
                 }
             }
 
+
+        // 4. Driver cancela
+
         } else if (userRole === "DRIVER") {
+
             const driverResult = await client.query(
                 `
                 SELECT
@@ -1368,7 +1527,8 @@ export async function cancelRide(req, res) {
                 await client.query("ROLLBACK");
 
                 return res.status(403).json({
-                    message: "El conductor no está asignado a este viaje"
+                    message:
+                        "El conductor no está asignado a este viaje"
                 });
             }
 
@@ -1384,10 +1544,14 @@ export async function cancelRide(req, res) {
                 await client.query("ROLLBACK");
 
                 return res.status(409).json({
-                    message: "El conductor no está en estado BUSY"
+                    message:
+                        "El conductor no está en estado BUSY"
                 });
             }
         }
+
+
+        // 5. Cancelar viaje
 
         const updateRideResult = await client.query(
             `
@@ -1402,19 +1566,20 @@ export async function cancelRide(req, res) {
             [id]
         );
 
-        await client.query(
-            `
-            INSERT INTO ride_status_history (
-                ride_id,
-                status,
-                changed_by
-            )
-            VALUES ($1, $2, $3)
-            `,
-            [id, "CANCELLED", userId]
-        );
+
+        // 6. Historial CANCELLED
+
+        await addRideStatusHistory(client, {
+            rideId: id,
+            status: "CANCELLED",
+            changedBy: userId
+        });
+
+
+        // 7. Liberar conductor
 
         if (driver) {
+
             await client.query(
                 `
                 UPDATE drivers
@@ -1427,7 +1592,9 @@ export async function cancelRide(req, res) {
             );
         }
 
+
         await client.query("COMMIT");
+
 
         return res.status(200).json({
             message: "El viaje ha sido cancelado",
@@ -1441,6 +1608,7 @@ export async function cancelRide(req, res) {
         });
 
     } catch (error) {
+
         await client.query("ROLLBACK");
 
         console.error(
@@ -1456,3 +1624,4 @@ export async function cancelRide(req, res) {
         client.release();
     }
 }
+
