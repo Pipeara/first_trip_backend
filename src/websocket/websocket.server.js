@@ -1,6 +1,11 @@
 
 import { WebSocketServer } from "ws";
 
+import {
+    handleWebSocketMessage,
+    handleWebSocketDisconnect
+} from "./websocket.events.js";
+
 let wss;
 
 export function initializeWebSocket(server) {
@@ -21,18 +26,18 @@ export function initializeWebSocket(server) {
 
         socket.on("message", (message) => {
             try {
-                const data = JSON.parse(message.toString());
+                const data = JSON.parse(
+                    message.toString()
+                );
 
                 console.log(
                     "📨 WebSocket message:",
                     data
                 );
 
-                socket.send(
-                    JSON.stringify({
-                        type: "message.received",
-                        data
-                    })
+                handleWebSocketMessage(
+                    socket,
+                    data
                 );
 
             } catch (error) {
@@ -51,7 +56,13 @@ export function initializeWebSocket(server) {
         });
 
         socket.on("close", () => {
-            console.log("🔌 WebSocket desconectado");
+            console.log(
+                "🔌 WebSocket desconectado"
+            );
+
+            handleWebSocketDisconnect(
+                socket
+            );
         });
 
         socket.on("error", (error) => {

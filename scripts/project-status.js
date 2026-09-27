@@ -91,21 +91,6 @@ function routeContains(
         return false;
     }
 
-    /*
-     * Convierte esto:
-     *
-     * router.patch(
-     *     "/:id/accept",
-     *     authenticateToken,
-     *     authorizeRoles("DRIVER"),
-     *     acceptRide
-     * );
-     *
-     * en una sola línea lógica:
-     *
-     * router.patch( "/:id/accept", ...
-     */
-
     const normalized = content
         .replace(/\s+/g, " ")
         .trim();
@@ -164,7 +149,8 @@ async function checkDatabase() {
         drivers: 0,
         vehicles: 0,
         rides: 0,
-        history: 0
+        history: 0,
+        driverLocations: 0
     };
 
     try {
@@ -237,6 +223,15 @@ async function checkDatabase() {
         result.history =
             historyResult.rows[0].count;
 
+        const driverLocationsResult =
+            await pool.query(`
+                SELECT COUNT(*)::int AS count
+                FROM driver_locations
+            `);
+
+        result.driverLocations =
+            driverLocationsResult.rows[0].count;
+
     } catch (error) {
 
         console.error(
@@ -292,6 +287,31 @@ async function getHistoryStatuses() {
     }
 
     return result;
+}
+
+// =========================================================
+// DAY 14 — REALTIME RIDE STATUS DETECTION
+// =========================================================
+
+function broadcastTransitionContains(
+    controllerContent,
+    previousStatus,
+    nextStatus
+) {
+    const matches =
+        controllerContent.match(
+            /broadcastRideStatusChanged\s*\(\s*\{([\s\S]*?)\}\s*\);/g
+        ) || [];
+
+    return matches.some(
+        block =>
+            block.includes(
+                `previousStatus: "${previousStatus}"`
+            ) &&
+            block.includes(
+                `status: "${nextStatus}"`
+            )
+    );
 }
 
 // =========================================================
@@ -417,6 +437,10 @@ async function main() {
 
         console.log(
             `   Status history         ${database.history}`
+        );
+
+        console.log(
+            `   Driver locations       ${database.driverLocations}`
         );
     }
 
@@ -654,9 +678,6 @@ async function main() {
     const vehiclesRoutes =
         "src/routes/vehicles.routes.js";
 
-    const vehiclesController =
-        "src/controllers/vehicles.controller.js";
-
     const vehicleGet =
         routeContains(
             vehiclesRoutes,
@@ -840,75 +861,30 @@ async function main() {
         "PATCH /api/v1/rides/:id/accept"
     );
 
-    if (rideArriving) {
+    printStatus(
+        rideArriving,
+        "PATCH /api/v1/rides/:id/arriving"
+    );
 
-        printStatus(
-            true,
-            "PATCH /api/v1/rides/:id/arriving"
-        );
+    printStatus(
+        rideWaiting,
+        "PATCH /api/v1/rides/:id/waiting"
+    );
 
-    } else {
+    printStatus(
+        rideStart,
+        "PATCH /api/v1/rides/:id/start"
+    );
 
-        printPending(
-            "PATCH /api/v1/rides/:id/arriving"
-        );
-    }
+    printStatus(
+        rideComplete,
+        "PATCH /api/v1/rides/:id/complete"
+    );
 
-    if (rideWaiting) {
-
-        printStatus(
-            true,
-            "PATCH /api/v1/rides/:id/waiting"
-        );
-
-    } else {
-
-        printPending(
-            "PATCH /api/v1/rides/:id/waiting"
-        );
-    }
-
-    if (rideStart) {
-
-        printStatus(
-            true,
-            "PATCH /api/v1/rides/:id/start"
-        );
-
-    } else {
-
-        printPending(
-            "PATCH /api/v1/rides/:id/start"
-        );
-    }
-
-    if (rideComplete) {
-
-        printStatus(
-            true,
-            "PATCH /api/v1/rides/:id/complete"
-        );
-
-    } else {
-
-        printPending(
-            "PATCH /api/v1/rides/:id/complete"
-        );
-    }
-
-    if (rideCancel) {
-
-        printStatus(
-            true,
-            "PATCH /api/v1/rides/:id/cancel"
-        );
-
-    } else {
-
-        printPending(
-            "PATCH /api/v1/rides/:id/cancel"
-        );
-    }
+    printStatus(
+        rideCancel,
+        "PATCH /api/v1/rides/:id/cancel"
+    );
 
     printStatus(
         exists(ridesController),
@@ -965,75 +941,30 @@ async function main() {
         "SEARCHING → ACCEPTED"
     );
 
-    if (rideArriving) {
+    printStatus(
+        rideArriving,
+        "ACCEPTED → DRIVER_ARRIVING"
+    );
 
-        printStatus(
-            true,
-            "ACCEPTED → DRIVER_ARRIVING"
-        );
+    printStatus(
+        rideWaiting,
+        "DRIVER_ARRIVING → DRIVER_WAITING"
+    );
 
-    } else {
+    printStatus(
+        rideStart,
+        "DRIVER_WAITING → IN_PROGRESS"
+    );
 
-        printPending(
-            "ACCEPTED → DRIVER_ARRIVING"
-        );
-    }
+    printStatus(
+        rideComplete,
+        "IN_PROGRESS → COMPLETED"
+    );
 
-    if (rideWaiting) {
-
-        printStatus(
-            true,
-            "DRIVER_ARRIVING → DRIVER_WAITING"
-        );
-
-    } else {
-
-        printPending(
-            "DRIVER_ARRIVING → DRIVER_WAITING"
-        );
-    }
-
-    if (rideStart) {
-
-        printStatus(
-            true,
-            "DRIVER_WAITING → IN_PROGRESS"
-        );
-
-    } else {
-
-        printPending(
-            "DRIVER_WAITING → IN_PROGRESS"
-        );
-    }
-
-    if (rideComplete) {
-
-        printStatus(
-            true,
-            "IN_PROGRESS → COMPLETED"
-        );
-
-    } else {
-
-        printPending(
-            "IN_PROGRESS → COMPLETED"
-        );
-    }
-
-    if (rideCancel) {
-
-        printStatus(
-            true,
-            "Cancellation"
-        );
-
-    } else {
-
-        printPending(
-            "Cancellation"
-        );
-    }
+    printStatus(
+        rideCancel,
+        "Cancellation"
+    );
 
     // =====================================================
     // STATUS HISTORY
@@ -1068,6 +999,11 @@ async function main() {
     );
 
     printStatus(
+        historyStatuses.REQUESTED,
+        "REQUESTED registrado"
+    );
+
+    printStatus(
         historyStatuses.SEARCHING,
         "SEARCHING registrado"
     );
@@ -1077,85 +1013,30 @@ async function main() {
         "ACCEPTED registrado"
     );
 
-    if (
-        historyStatuses.DRIVER_ARRIVING
-    ) {
+    printStatus(
+        historyStatuses.DRIVER_ARRIVING,
+        "DRIVER_ARRIVING registrado"
+    );
 
-        printStatus(
-            true,
-            "DRIVER_ARRIVING registrado"
-        );
+    printStatus(
+        historyStatuses.DRIVER_WAITING,
+        "DRIVER_WAITING registrado"
+    );
 
-    } else {
+    printStatus(
+        historyStatuses.IN_PROGRESS,
+        "IN_PROGRESS registrado"
+    );
 
-        printPending(
-            "DRIVER_ARRIVING pendiente"
-        );
-    }
+    printStatus(
+        historyStatuses.COMPLETED,
+        "COMPLETED registrado"
+    );
 
-    if (
-        historyStatuses.DRIVER_WAITING
-    ) {
-
-        printStatus(
-            true,
-            "DRIVER_WAITING registrado"
-        );
-
-    } else {
-
-        printPending(
-            "DRIVER_WAITING pendiente"
-        );
-    }
-
-    if (
-        historyStatuses.IN_PROGRESS
-    ) {
-
-        printStatus(
-            true,
-            "IN_PROGRESS registrado"
-        );
-
-    } else {
-
-        printPending(
-            "IN_PROGRESS pendiente"
-        );
-    }
-
-    if (
-        historyStatuses.COMPLETED
-    ) {
-
-        printStatus(
-            true,
-            "COMPLETED registrado"
-        );
-
-    } else {
-
-        printPending(
-            "COMPLETED pendiente"
-        );
-    }
-
-    if (
-        historyStatuses.CANCELLED
-    ) {
-
-        printStatus(
-            true,
-            "CANCELLED registrado"
-        );
-
-    } else {
-
-        printPending(
-            "CANCELLED pendiente"
-        );
-    }
+    printStatus(
+        historyStatuses.CANCELLED,
+        "CANCELLED registrado"
+    );
 
     // =====================================================
     // DAY 9 — AUTH
@@ -1247,49 +1128,454 @@ async function main() {
             "src/services/routing.service.js"
         );
 
-    if (
-        mapsRoutes &&
-        mapsController &&
-        routingService
-    ) {
-
-        printStatus(
-            true,
-            "Maps / OSRM structure"
+    const mapsRoute =
+        routeContains(
+            "src/routes/maps.routes.js",
+            "post",
+            "/route"
         );
 
-    } else {
-
-        printPending(
-            "Maps / OSRM"
+    const mapsControllerHandler =
+        controllerContains(
+            "src/controllers/maps.controller.js",
+            "getRoute"
         );
-    }
+
+    const osrmImplementation =
+        controllerContains(
+            "src/services/routing.service.js",
+            "router.project-osrm.org"
+        );
+
+    const mapsFeatures = [
+        mapsRoutes,
+        mapsController,
+        routingService,
+        mapsRoute,
+        mapsControllerHandler,
+        osrmImplementation
+    ];
+
+    const mapsCompleted =
+        mapsFeatures.filter(Boolean).length;
+
+    const mapsTotal =
+        mapsFeatures.length;
+
+    printStatus(
+        mapsRoutes,
+        "Maps routes"
+    );
+
+    printStatus(
+        mapsController,
+        "Maps controller"
+    );
+
+    printStatus(
+        routingService,
+        "Routing service"
+    );
+
+    printStatus(
+        mapsRoute,
+        "POST /api/v1/maps/route"
+    );
+
+    printStatus(
+        mapsControllerHandler,
+        "Route controller handler"
+    );
+
+    printStatus(
+        osrmImplementation,
+        "OSRM routing"
+    );
+
+    const mapsPercentage =
+        printProgress(
+            "   Progress",
+            mapsCompleted,
+            mapsTotal
+        );
 
     // =====================================================
-    // DAY 11 — WEBSOCKET
+    // DAY 11 — WEBSOCKET FOUNDATION
     // =====================================================
 
     console.log("");
     console.log(
-        "📡 DÍA 11 — WEBSOCKET"
+        "📡 DÍA 11 — WEBSOCKET FOUNDATION"
     );
 
-    const websocketExists =
-        exists("src/websocket");
-
-    if (websocketExists) {
-
-        printStatus(
-            true,
-            "WebSocket structure"
+    const websocketServer =
+        exists(
+            "src/websocket/websocket.server.js"
         );
 
-    } else {
-
-        printPending(
-            "WebSocket"
+    const websocketClients =
+        exists(
+            "src/websocket/websocket.clients.js"
         );
-    }
+
+    const websocketEvents =
+        exists(
+            "src/websocket/websocket.events.js"
+        );
+
+    const websocketInitialization =
+        controllerContains(
+            "src/websocket/websocket.server.js",
+            "new WebSocketServer"
+        );
+
+    const websocketPath =
+        controllerContains(
+            "src/websocket/websocket.server.js",
+            'path: "/ws"'
+        );
+
+    const websocketFoundationFeatures = [
+        websocketServer,
+        websocketClients,
+        websocketEvents,
+        websocketInitialization,
+        websocketPath
+    ];
+
+    const websocketFoundationCompleted =
+        websocketFoundationFeatures
+            .filter(Boolean)
+            .length;
+
+    const websocketFoundationTotal =
+        websocketFoundationFeatures.length;
+
+    printStatus(
+        websocketServer,
+        "WebSocket server"
+    );
+
+    printStatus(
+        websocketClients,
+        "WebSocket clients"
+    );
+
+    printStatus(
+        websocketEvents,
+        "WebSocket events"
+    );
+
+    printStatus(
+        websocketInitialization,
+        "WebSocketServer initialization"
+    );
+
+    printStatus(
+        websocketPath,
+        "WebSocket path /ws"
+    );
+
+    const websocketFoundationPercentage =
+        printProgress(
+            "   Progress",
+            websocketFoundationCompleted,
+            websocketFoundationTotal
+        );
+
+    // =====================================================
+    // DAY 12 — WEBSOCKET + RIDES
+    // =====================================================
+
+    console.log("");
+    console.log(
+        "🔄 DÍA 12 — WEBSOCKET + RIDES"
+    );
+
+    const rideJoin =
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            '"ride.join"'
+        );
+
+    const rideLeave =
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            '"ride.leave"'
+        );
+
+    const rideJoinedEvent =
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            '"ride.joined"'
+        );
+
+    const rideLeftEvent =
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            '"ride.left"'
+        );
+
+    const disconnectCleanup =
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            "handleWebSocketDisconnect"
+        ) &&
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            "removeClientFromRide"
+        );
+
+    const broadcastImplementation =
+        controllerContains(
+            "src/websocket/websocket.clients.js",
+            "broadcastToRide"
+        );
+
+    const websocketRideFeatures = [
+        rideJoin,
+        rideLeave,
+        rideJoinedEvent,
+        rideLeftEvent,
+        disconnectCleanup,
+        broadcastImplementation
+    ];
+
+    const websocketRideCompleted =
+        websocketRideFeatures.filter(Boolean).length;
+
+    const websocketRideTotal =
+        websocketRideFeatures.length;
+
+    printStatus(
+        rideJoin,
+        "ride.join"
+    );
+
+    printStatus(
+        rideJoinedEvent,
+        "ride.joined"
+    );
+
+    printStatus(
+        rideLeave,
+        "ride.leave"
+    );
+
+    printStatus(
+        rideLeftEvent,
+        "ride.left"
+    );
+
+    printStatus(
+        disconnectCleanup,
+        "Disconnect cleanup"
+    );
+
+    printStatus(
+        broadcastImplementation,
+        "broadcastToRide"
+    );
+
+    const websocketRidePercentage =
+        printProgress(
+            "   Progress",
+            websocketRideCompleted,
+            websocketRideTotal
+        );
+
+    // =====================================================
+    // DAY 13 — DRIVER LOCATION
+    // =====================================================
+
+    console.log("");
+    console.log(
+        "📍 DÍA 13 — DRIVER LOCATION"
+    );
+
+    const driverLocationService =
+        exists(
+            "src/services/driver-location.service.js"
+        );
+
+    const driverLocationTable =
+        database.connected &&
+        database.driverLocations >= 0;
+
+    const driverLocationEvent =
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            '"driver.location_updated"'
+        );
+
+    const locationValidation =
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            "Number.isFinite(latitude)"
+        ) &&
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            "Number.isFinite(longitude)"
+        );
+
+    const locationPersistence =
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            "saveDriverLocation"
+        );
+
+    const locationBroadcast =
+        controllerContains(
+            "src/websocket/websocket.events.js",
+            "broadcastToRide"
+        );
+
+    const driverLocationFeatures = [
+        driverLocationService,
+        driverLocationTable,
+        driverLocationEvent,
+        locationValidation,
+        locationPersistence,
+        locationBroadcast
+    ];
+
+    const driverLocationCompleted =
+        driverLocationFeatures.filter(Boolean).length;
+
+    const driverLocationTotal =
+        driverLocationFeatures.length;
+
+    printStatus(
+        driverLocationService,
+        "Driver location service"
+    );
+
+    printStatus(
+        driverLocationTable,
+        `driver_locations ${
+            database.connected
+                ? `(${database.driverLocations} registros)`
+                : ""
+        }`
+    );
+
+    printStatus(
+        driverLocationEvent,
+        "driver.location_updated"
+    );
+
+    printStatus(
+        locationValidation,
+        "Latitude / longitude validation"
+    );
+
+    printStatus(
+        locationPersistence,
+        "Persistencia en PostgreSQL"
+    );
+
+    printStatus(
+        locationBroadcast,
+        "Broadcast al Ride"
+    );
+
+    const driverLocationPercentage =
+        printProgress(
+            "   Progress",
+            driverLocationCompleted,
+            driverLocationTotal
+        );
+
+    // =====================================================
+    // DAY 14 — REALTIME RIDE STATUS
+    // =====================================================
+
+    console.log("");
+    console.log(
+        "📡 DÍA 14 — REALTIME RIDE STATUS"
+    );
+
+    const ridesControllerContent =
+        read("src/controllers/rides.controller.js");
+
+    const rideStatusChangedEvent =
+        ridesControllerContent.includes(
+            'type: "ride.status_changed"'
+        );
+
+    const acceptedToArriving =
+        broadcastTransitionContains(
+            ridesControllerContent,
+            "ACCEPTED",
+            "DRIVER_ARRIVING"
+        );
+
+    const arrivingToWaiting =
+        broadcastTransitionContains(
+            ridesControllerContent,
+            "DRIVER_ARRIVING",
+            "DRIVER_WAITING"
+        );
+
+    const waitingToInProgress =
+        broadcastTransitionContains(
+            ridesControllerContent,
+            "DRIVER_WAITING",
+            "IN_PROGRESS"
+        );
+
+    const inProgressToCompleted =
+        broadcastTransitionContains(
+            ridesControllerContent,
+            "IN_PROGRESS",
+            "COMPLETED"
+        );
+
+    printStatus(
+        rideStatusChangedEvent,
+        "ride.status_changed"
+    );
+
+    printStatus(
+        acceptedToArriving,
+        "Integrar ACCEPTED → DRIVER_ARRIVING"
+    );
+
+    printStatus(
+        arrivingToWaiting,
+        "Integrar DRIVER_ARRIVING → DRIVER_WAITING"
+    );
+
+    printStatus(
+        waitingToInProgress,
+        "Integrar DRIVER_WAITING → IN_PROGRESS"
+    );
+
+    printStatus(
+        inProgressToCompleted,
+        "Integrar IN_PROGRESS → COMPLETED"
+    );
+
+    const realtimeStatusFeatures = [
+        rideStatusChangedEvent,
+        acceptedToArriving,
+        arrivingToWaiting,
+        waitingToInProgress,
+        inProgressToCompleted
+    ];
+
+    const realtimeStatusCompleted =
+        realtimeStatusFeatures.filter(Boolean).length;
+
+    const realtimeStatusTotal =
+        realtimeStatusFeatures.length;
+
+    const realtimeStatusPercentage =
+        printProgress(
+            "   Progress",
+            realtimeStatusCompleted,
+            realtimeStatusTotal
+        );
 
     // =====================================================
     // CURRENT TASK
@@ -1300,64 +1586,30 @@ async function main() {
         "🎯 CURRENT TASK"
     );
 
-    if (!rideArriving) {
+    if (
+        realtimeStatusPercentage === 100
+    ) {
 
         console.log(
-            "   PATCH /api/v1/rides/:id/arriving"
+            "   Realtime de estados del Ride integrado"
         );
 
         console.log(
-            "   → ACCEPTED → DRIVER_ARRIVING"
-        );
-
-    } else if (!rideWaiting) {
-
-        console.log(
-            "   PATCH /api/v1/rides/:id/waiting"
+            "   → ride.status_changed"
         );
 
         console.log(
-            "   → DRIVER_ARRIVING → DRIVER_WAITING"
-        );
-
-    } else if (!rideStart) {
-
-        console.log(
-            "   PATCH /api/v1/rides/:id/start"
-        );
-
-        console.log(
-            "   → DRIVER_WAITING → IN_PROGRESS"
-        );
-
-    } else if (!rideComplete) {
-
-        console.log(
-            "   PATCH /api/v1/rides/:id/complete"
-        );
-
-        console.log(
-            "   → IN_PROGRESS → COMPLETED"
-        );
-
-    } else if (!rideCancel) {
-
-        console.log(
-            "   PATCH /api/v1/rides/:id/cancel"
-        );
-
-        console.log(
-            "   → Implementar cancelación"
+            "   → Día 14 — Realtime Ride Status ✅"
         );
 
     } else {
 
         console.log(
-            "   Ride lifecycle principal completado"
+            "   Completar realtime de estados del Ride"
         );
 
         console.log(
-            "   → Siguiente bloque: OSRM / WebSocket"
+            "   → Día 14 — Realtime Ride Status"
         );
     }
 
@@ -1393,6 +1645,26 @@ async function main() {
 
     console.log(
         `   Día 9 — Auth              ${authPercentage}%`
+    );
+
+    console.log(
+        `   Día 10 — Maps / OSRM      ${mapsPercentage}%`
+    );
+
+    console.log(
+        `   Día 11 — WebSocket        ${websocketFoundationPercentage}%`
+    );
+
+    console.log(
+        `   Día 12 — WS + Rides       ${websocketRidePercentage}%`
+    );
+
+    console.log(
+        `   Día 13 — Driver Location  ${driverLocationPercentage}%`
+    );
+
+    console.log(
+        `   Día 14 — Ride Status      ${realtimeStatusPercentage}%`
     );
 
     console.log(

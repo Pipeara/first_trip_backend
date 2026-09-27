@@ -1,7 +1,24 @@
-
 import { pool } from "../config/db.js";
 import { startRideSearch } from "../services/ride-search.service.js";
 import { addRideStatusHistory } from "../services/ride-history.service.js";
+import { broadcastToRide } from "../websocket/websocket.clients.js";
+
+
+function broadcastRideStatusChanged({
+    rideId,
+    previousStatus,
+    status,
+    changedBy
+}) {
+    broadcastToRide(rideId, {
+        type: "ride.status_changed",
+        ride_id: rideId,
+        status,
+        previous_status: previousStatus,
+        changed_by: changedBy,
+        timestamp: new Date().toISOString()
+    });
+}
 
 
 export async function getRides(req, res) {
@@ -808,6 +825,18 @@ export async function arrivingRide(req, res) {
         await client.query("COMMIT");
 
 
+        // 6. Realtime
+        //    Se publica DESPUÉS del COMMIT para que ningún cliente
+        //    reciba un estado que posteriormente sea revertido.
+
+        broadcastRideStatusChanged({
+            rideId: id,
+            previousStatus: "ACCEPTED",
+            status: "DRIVER_ARRIVING",
+            changedBy: userId
+        });
+
+
         return res.status(200).json({
             message: "El conductor está en camino",
             ride: updateRideResult.rows[0]
@@ -1013,6 +1042,16 @@ export async function waitingRide(req, res) {
         await client.query("COMMIT");
 
 
+        // 6. Realtime
+
+        broadcastRideStatusChanged({
+            rideId: id,
+            previousStatus: "DRIVER_ARRIVING",
+            status: "DRIVER_WAITING",
+            changedBy: userId
+        });
+
+
         return res.status(200).json({
             message:
                 "El conductor ha llegado y está esperando al pasajero",
@@ -1178,6 +1217,16 @@ export async function startRide(req, res) {
 
 
         await client.query("COMMIT");
+
+
+        // 5. Realtime
+
+        broadcastRideStatusChanged({
+            rideId: id,
+            previousStatus: "DRIVER_WAITING",
+            status: "IN_PROGRESS",
+            changedBy: userId
+        });
 
 
         return res.status(200).json({
@@ -1358,6 +1407,16 @@ export async function completeRide(req, res) {
 
 
         await client.query("COMMIT");
+
+
+        // 6. Realtime
+
+        broadcastRideStatusChanged({
+            rideId: id,
+            previousStatus: "IN_PROGRESS",
+            status: "COMPLETED",
+            changedBy: userId
+        });
 
 
         return res.status(200).json({
@@ -1616,7 +1675,7 @@ export async function cancelRide(req, res) {
             error.message
         );
 
-        return res.status(500).json({
+        res.status(500).json({
             message: "Error interno del servidor"
         });
 
@@ -1624,4 +1683,3 @@ export async function cancelRide(req, res) {
         client.release();
     }
 }
-
